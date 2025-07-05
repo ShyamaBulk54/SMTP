@@ -1,225 +1,190 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
-import {
-  Shield,
-  Plus,
-  Upload,
-  RefreshCw,
-  X,
-  Download,
-  Trash2,
-  ChevronLeft,
-  ChevronRight,
-  Settings,
-  MoreHorizontal,
-} from "lucide-react"
+import { Ban, PlusCircle, Upload, RefreshCw, X, ChevronLeft, ChevronRight, Download, SlidersHorizontal, Trash, Edit, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useRouter } from "next/navigation"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuCheckboxItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
-interface IPBlacklistEntry {
+interface IpBlacklistItem {
   id: string
   ipAddress: string
-  reason: string
   dateAdded: string
 }
 
-const loadIPBlacklistFromStorage = (): IPBlacklistEntry[] => {
-  if (typeof window === "undefined") return []
-  const saved = localStorage.getItem("ipBlacklistData")
-  return saved ? JSON.parse(saved) : []
-}
-
-const saveIPBlacklistToStorage = (data: IPBlacklistEntry[]) => {
-  if (typeof window === "undefined") return
-  localStorage.setItem("ipBlacklistData", JSON.stringify(data))
-}
-
-export default function IPBlacklistContent() {
+export default function IpBlacklistContent() {
+  const router = useRouter()
   const [showCreateForm, setShowCreateForm] = useState(false)
-  const [showSuccess, setShowSuccess] = useState(false)
   const [showError, setShowError] = useState(false)
-  const [searchIP, setSearchIP] = useState("")
-  const [searchReason, setSearchReason] = useState("")
-  const [searchDate, setSearchDate] = useState("")
-  const [editingItem, setEditingItem] = useState<IPBlacklistEntry | null>(null)
-  const [showImportModal, setShowImportModal] = useState(false)
-  const [importFile, setImportFile] = useState<File | null>(null)
+  const [showSuccess, setShowSuccess] = useState(false)
+  const [searchIp, setSearchIp] = useState("")
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [removeAllDialogOpen, setRemoveAllDialogOpen] = useState(false)
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [itemToDelete, setItemToDelete] = useState<string | null>(null)
+  const [editingItem, setEditingItem] = useState<IpBlacklistItem | null>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set())
   const [visibleColumns, setVisibleColumns] = useState({
     ipAddress: true,
-    reason: true,
     dateAdded: true,
   })
+  const [showColumnsDropdown, setShowColumnsDropdown] = useState(false)
 
-  const [blacklistData, setBlacklistData] = useState<IPBlacklistEntry[]>(() => {
-    const storedData = loadIPBlacklistFromStorage()
-    return storedData
+
+  // Start with empty array - no dummy data
+  const [ipBlacklistItems, setIpBlacklistItems] = useState<IpBlacklistItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('ipBlacklistItems')
+      return saved ? JSON.parse(saved) : []
+    }
+    return []
   })
-  const [isInitialLoad, setIsInitialLoad] = useState(true)
-
   useEffect(() => {
-    const storedData = loadIPBlacklistFromStorage()
-    const sortedData = storedData.sort((a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime())
-    setBlacklistData(sortedData)
-    setIsInitialLoad(false)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ipBlacklistItems', JSON.stringify(ipBlacklistItems))
+    }
+  }, [ipBlacklistItems])
+  // Add this useEffect after your existing useEffects:
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!event.target || !(event.target as Element).closest(".columns-dropdown")) {
+        setShowColumnsDropdown(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+    }
   }, [])
 
-  useEffect(() => {
-    if (!isInitialLoad && typeof window !== "undefined") {
-      saveIPBlacklistToStorage(blacklistData)
-    }
-  }, [blacklistData, isInitialLoad])
+  // Filter items based on search
+  const filteredItems = ipBlacklistItems.filter((item) => {
+    const matchesIp = item.ipAddress.toLowerCase().includes(searchIp.toLowerCase())
+    return matchesIp
+  })
+
 
   const handleRefresh = () => {
-    window.location.reload()
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('ipBlacklistItems')
+      if (saved) {
+        try {
+          setIpBlacklistItems(JSON.parse(saved))
+        } catch (error) {
+          console.error('Error parsing saved data:', error)
+          setIpBlacklistItems([])
+        }
+      } else {
+        setIpBlacklistItems([])
+      }
+    }
   }
-
+  const handleDeleteClick = (itemId: string) => {
+    setItemToDelete(itemId)
+    setDeleteDialogOpen(true)
+  }
   const handleToggleColumn = (column: keyof typeof visibleColumns) => {
     setVisibleColumns((prev) => ({
       ...prev,
       [column]: !prev[column],
     }))
   }
-
-  const handleRemoveItem = (id: string) => {
-    setBlacklistData((prev) => prev.filter((item) => item.id !== id))
+  const handleConfirmDelete = () => {
+    if (itemToDelete) {
+      setIpBlacklistItems((prev) => prev.filter((item) => item.id !== itemToDelete))
+      setItemToDelete(null)
+      setDeleteDialogOpen(false)
+    }
   }
 
-  const handleEditItem = (item: IPBlacklistEntry) => {
+  const handleRemoveAll = () => {
+    setIpBlacklistItems([])
+    setRemoveAllDialogOpen(false)
+  }
+
+  const handleUpdateClick = (item: IpBlacklistItem) => {
     setEditingItem(item)
-    setShowCreateForm(true)
   }
 
-  const handleExportCSV = () => {
-    const headers = ["IP Address", "Reason", "Date Added"]
-    const csvContent = [
-      headers.join(","),
-      ...blacklistData.map((item) => [`"${item.ipAddress}"`, `"${item.reason}"`, `"${item.dateAdded}"`].join(",")),
-    ].join("\n")
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-    const link = document.createElement("a")
-    const url = URL.createObjectURL(blob)
-    link.setAttribute("href", url)
-    link.setAttribute("download", "ip-blacklist.csv")
-    link.style.visibility = "hidden"
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+  const handleUpdateSubmit = (updatedItem: IpBlacklistItem) => {
+    setIpBlacklistItems((prev) => prev.map((item) => (item.id === updatedItem.id ? updatedItem : item)))
+    setEditingItem(null)
   }
 
-  const handleImportCSV = () => {
-    if (!importFile) return
+  const handleExport = () => {
+    const csvContent =
+      "IP Address,Date Added\n" + ipBlacklistItems.map((item) => `${item.ipAddress},${item.dateAdded}`).join("\n")
 
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const text = e.target?.result as string
-        if (!text) return
+    const blob = new Blob([csvContent], { type: "text/csv" })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "ip-blacklist.csv"
+    a.click()
+    window.URL.revokeObjectURL(url)
+  }
 
-        const lines = text.split("\n").filter((line) => line.trim())
-        if (lines.length < 2) return
+  const handleImport = () => {
+    setImportDialogOpen(true)
+  }
 
-        const newEntries: IPBlacklistEntry[] = []
-        for (let i = 1; i < lines.length; i++) {
-          const values = lines[i].split(",")
-          if (values.length >= 1 && values[0]?.trim()) {
-            newEntries.push({
-              id: Date.now().toString() + i,
-              ipAddress: values[0].replace(/"/g, "").trim(),
-              reason: values[1] ? values[1].replace(/"/g, "").trim() : "Imported",
-              dateAdded: new Date().toLocaleString(),
-            })
-          }
-        }
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    setSelectedFile(file || null)
+  }
 
-        if (newEntries.length > 0) {
-          setBlacklistData((prev) => [...prev, ...newEntries])
-          setShowSuccess(true)
-        }
-
-        setShowImportModal(false)
-        setImportFile(null)
-      } catch (error) {
-        console.error("Error importing CSV:", error)
-        setShowError(true)
-        setShowImportModal(false)
-        setImportFile(null)
-      }
+  const handleImportFile = () => {
+    if (selectedFile) {
+      // Placeholder for import functionality
+      console.log("Importing file:", selectedFile.name)
+      setImportDialogOpen(false)
+      setSelectedFile(null)
     }
-
-    reader.onerror = () => {
-      setShowError(true)
-      setShowImportModal(false)
-      setImportFile(null)
-    }
-
-    reader.readAsText(importFile)
   }
 
-  const filteredData = blacklistData.filter((item) => {
-    return (
-      item.ipAddress.toLowerCase().includes(searchIP.toLowerCase()) &&
-      item.reason.toLowerCase().includes(searchReason.toLowerCase()) &&
-      item.dateAdded.toLowerCase().includes(searchDate.toLowerCase())
-    )
-  })
+  const toggleColumn = (column: string) => {
+    const newHiddenColumns = new Set(hiddenColumns)
+    if (newHiddenColumns.has(column)) {
+      newHiddenColumns.delete(column)
+    } else {
+      newHiddenColumns.add(column)
+    }
+    setHiddenColumns(newHiddenColumns)
+  }
 
-  if (blacklistData.length === 0 && !showCreateForm) {
-    return (
-      <div className="flex flex-col gap-6">
-        <div className="flex items-center justify-between">
-          <h1 className="flex items-center text-xl font-semibold">
-            <Shield className="mr-2 h-5 w-5" /> IP Blacklist
-          </h1>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="default"
-              className="bg-blue-500 text-white hover:bg-blue-600"
-              onClick={() => setShowCreateForm(true)}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Create new
-            </Button>
-            <Button
-              variant="default"
-              className="bg-blue-500 text-white hover:bg-blue-600"
-              onClick={() => setShowImportModal(true)}
-            >
-              <Upload className="mr-2 h-4 w-4" />
-              Import
-            </Button>
-            <Button variant="default" className="bg-blue-500 text-white hover:bg-blue-600" onClick={handleRefresh}>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Refresh
-            </Button>
-          </div>
-        </div>
+  // Calculate pagination info
+  const totalItems = filteredItems.length
+  const startItem = totalItems > 0 ? 1 : 0
+  const endItem = totalItems
+  const resultText = totalItems === 1 ? "result" : "results"
 
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-            <Shield className="h-12 w-12 text-gray-400" />
-          </div>
-          <h2 className="text-2xl font-semibold text-gray-700 mb-2">Manage your IP blacklist</h2>
-          <p className="text-gray-500 max-w-md">
-            Block IP addresses that you don't want to receive emails from your campaigns.
-          </p>
-        </div>
-      </div>
-    )
+  const handleEdit = (item: IpBlacklistItem) => {
+    setEditingItem(item)
+  }
+
+  const handleDelete = (id: string) => {
+    setItemToDelete(id)
+    setDeleteDialogOpen(true)
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       {showSuccess && (
         <Alert className="bg-green-500 text-white border-green-500">
           <AlertDescription className="flex items-center justify-between">
@@ -252,71 +217,27 @@ export default function IPBlacklistContent() {
         </Alert>
       )}
 
-      <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Import from CSV file</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="bg-blue-500 text-white p-3 rounded text-sm">
-              Please note, the csv file must contain a header with at least the IP address column. If unsure about how
-              to format your file, do an export first and see how the file looks.
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">File</label>
-              <Input
-                type="file"
-                accept=".csv"
-                onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-                className="cursor-pointer"
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowImportModal(false)}>
-                Close
-              </Button>
-              <Button
-                className="bg-blue-500 text-white hover:bg-blue-600"
-                onClick={handleImportCSV}
-                disabled={!importFile}
-              >
-                Import file
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {showCreateForm ? (
-        <CreateIPBlacklistForm
-          editingItem={editingItem}
-          onCancel={() => {
-            setShowCreateForm(false)
-            setEditingItem(null)
-          }}
-          onSubmit={(success, data) => {
-            if (success && data) {
-              if (editingItem) {
-                setBlacklistData((prev) =>
-                  prev.map((item) =>
-                    item.id === editingItem.id
-                      ? { ...item, ipAddress: data.ipAddress, reason: data.reason || "No reason provided" }
-                      : item,
-                  ),
-                )
-              } else {
-                setBlacklistData((prev) => [
-                  ...prev,
-                  {
-                    id: Date.now().toString(),
-                    ipAddress: data.ipAddress,
-                    reason: data.reason || "No reason provided",
-                    dateAdded: new Date().toLocaleString(),
-                  },
-                ])
-              }
+        <CreateIpBlacklistForm
+          onCancel={() => setShowCreateForm(false)}
+          onSubmit={(success, newItem) => {
+            if (success && newItem) {
+              setIpBlacklistItems((prev) => [...prev, newItem])
               setShowCreateForm(false)
-              setEditingItem(null)
+              setShowSuccess(true)
+              setTimeout(() => setShowSuccess(false), 330)
+            } else {
+              setShowError(true)
+            }
+          }}
+        />
+      ) : editingItem ? (
+        <UpdateIpBlacklistForm
+          item={editingItem}
+          onCancel={() => setEditingItem(null)}
+          onSubmit={(success, updatedItem) => {
+            if (success && updatedItem) {
+              handleUpdateSubmit(updatedItem)
               setShowSuccess(true)
             } else {
               setShowError(true)
@@ -327,264 +248,404 @@ export default function IPBlacklistContent() {
         <>
           <div className="flex items-center justify-between">
             <h1 className="flex items-center text-xl font-semibold">
-              <Shield className="mr-2 h-5 w-5" /> IP Blacklist
+              <Ban className="mr-2 h-5 w-5" /> IP blacklist
             </h1>
             <div className="flex flex-wrap items-center gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="bg-blue-500 text-white hover:bg-blue-600 px-3 py-2 rounded text-sm flex items-center gap-2 font-medium transition-colors"
-                  >
-                    <MoreHorizontal className="h-4 w-4" />
-                    Toggle columns
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuCheckboxItem
-                    checked={visibleColumns.ipAddress}
-                    onCheckedChange={() => handleToggleColumn("ipAddress")}
-                  >
-                    IP address
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuCheckboxItem
-                    checked={visibleColumns.reason}
-                    onCheckedChange={() => handleToggleColumn("reason")}
-                  >
-                    Reason
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuCheckboxItem
-                    checked={visibleColumns.dateAdded}
-                    onCheckedChange={() => handleToggleColumn("dateAdded")}
-                  >
-                    Date added
-                  </DropdownMenuCheckboxItem>
-                  <div className="px-2 py-1.5 border-t">
-                    <Button size="sm" className="w-full bg-blue-500 text-white hover:bg-blue-600">
-                      Save changes
-                    </Button>
+              {ipBlacklistItems.length > 0 && (
+              <div className="relative columns-dropdown">
+                <Button
+                  variant="default"
+                  className="bg-blue-500 text-white hover:bg-blue-600"
+                  onClick={() => setShowColumnsDropdown(!showColumnsDropdown)}
+                >
+                  <SlidersHorizontal className="mr-2 h-4 w-4" />
+                  <span className="hidden sm:inline">Toggle columns</span>
+                  <span className="sm:hidden">Columns</span>
+                </Button>
+                {showColumnsDropdown && (
+                  <div className="absolute top-full right-0 mt-1 w-48 sm:w-56 bg-white rounded-md shadow-lg border z-50">
+                    <div className="p-3">
+                      <div className="flex items-center space-x-2 py-1">
+                        <input
+                          type="checkbox"
+                          id="ipAddress"
+                          checked={visibleColumns.ipAddress}
+                          onChange={() => handleToggleColumn("ipAddress")}
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <label htmlFor="ipAddress" className="text-sm font-medium text-gray-700">
+                          IP Address
+                        </label>
+                      </div>
+                      <div className="flex items-center space-x-2 py-1">
+                        <input
+                          type="checkbox"
+                          id="dateAdded"
+                          checked={visibleColumns.dateAdded}
+                          onChange={() => handleToggleColumn("dateAdded")}
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <label htmlFor="dateAdded" className="text-sm font-medium text-gray-700">
+                          Date Added
+                        </label>
+                      </div>
+                      <button
+                        className="mt-3 w-full bg-blue-500 text-white hover:bg-blue-600 px-3 py-1 rounded text-sm font-medium"
+                        onClick={() => setShowColumnsDropdown(false)}
+                      >
+                        Save changes
+                      </button>
+                    </div>
                   </div>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
+                )}
+              </div>
+  )}
               <Button
                 variant="default"
-                size="sm"
-                className="bg-blue-500 text-white hover:bg-blue-600 px-3 py-2 rounded text-sm flex items-center gap-2 font-medium transition-colors"
+                className="bg-blue-500 text-white hover:bg-blue-600"
                 onClick={() => setShowCreateForm(true)}
               >
-                <Plus className="h-4 w-4" />
+                <PlusCircle className="mr-2 h-4 w-4" />
                 Create new
               </Button>
 
-              <Button
-                variant="default"
-                size="sm"
-                className="bg-blue-500 text-white hover:bg-blue-600 px-3 py-2 rounded text-sm flex items-center gap-2 font-medium transition-colors"
-                onClick={handleExportCSV}
-              >
-                <Download className="h-4 w-4" />
-                Export
-              </Button>
+              {ipBlacklistItems.length > 0 && (
+                <Button variant="default" className="bg-blue-500 text-white hover:bg-blue-600" onClick={handleExport}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Export
+                </Button>
+              )}
 
-              <Button
-                variant="default"
-                size="sm"
-                className="bg-blue-500 text-white hover:bg-blue-600 px-3 py-2 rounded text-sm flex items-center gap-2 font-medium transition-colors"
-                onClick={() => setShowImportModal(true)}
-              >
-                <Upload className="h-4 w-4" />
+              <Button variant="default" className="bg-blue-500 text-white hover:bg-blue-600" onClick={handleImport}>
+                <Upload className="mr-2 h-4 w-4" />
                 Import
               </Button>
 
-              <Button
-                variant="default"
-                size="sm"
-                className="bg-blue-500 text-white hover:bg-blue-600 px-3 py-2 rounded text-sm flex items-center gap-2 font-medium transition-colors"
-                onClick={handleRefresh}
-              >
-                <RefreshCw className="h-4 w-4" />
+              <Button variant="default" className="bg-blue-500 text-white hover:bg-blue-600" onClick={handleRefresh}>
+                <RefreshCw className="mr-2 h-4 w-4" />
                 Refresh
               </Button>
             </div>
+
           </div>
 
-          <div className="text-sm text-gray-600 mb-2">
-            Displaying {filteredData.length} of {blacklistData.length} result{blacklistData.length !== 1 ? "s" : ""}
-          </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-            <div className="border-b border-gray-200 p-4">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                {visibleColumns.ipAddress && (
-                  <div>
-                    <Input
-                      placeholder="Search IP..."
-                      value={searchIP}
-                      onChange={(e) => setSearchIP(e.target.value)}
-                      className="h-8 text-sm border-gray-300 w-32"
-                    />
-                  </div>
-                )}
-                {visibleColumns.reason && (
-                  <div>
-                    <Input
-                      placeholder="Search reason..."
-                      value={searchReason}
-                      onChange={(e) => setSearchReason(e.target.value)}
-                      className="h-8 text-sm border-gray-300 w-32"
-                    />
-                  </div>
-                )}
-                {visibleColumns.dateAdded && (
-                  <div>
-                    <Input
-                      placeholder="Search date..."
-                      value={searchDate}
-                      onChange={(e) => setSearchDate(e.target.value)}
-                      className="h-8 text-sm border-gray-300 w-32"
-                    />
-                  </div>
-                )}
-              </div>
+          {/* Results counter - only show when there are items */}
+          {ipBlacklistItems.length > 0 && (
+            <div className="text-sm text-muted-foreground">
+              Displaying {startItem}-{endItem} of {totalItems} {resultText}
             </div>
+          )}
 
+          <div className="rounded-md border border-border">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
+                  <tr className="border-b border-border bg-gray-50">
                     {visibleColumns.ipAddress && (
-                      <th className="px-4 py-3 text-left font-medium text-gray-700">IP address</th>
+                      <td className="px-4 py-2">
+                        <Input
+                          placeholder="Search IP address..."
+                          value={searchIp}
+                          onChange={(e) => setSearchIp(e.target.value)}
+                          className="h-8 text-sm w-48"
+                        />
+                      </td>
                     )}
-                    {visibleColumns.reason && <th className="px-4 py-3 text-left font-medium text-gray-700">Reason</th>}
                     {visibleColumns.dateAdded && (
-                      <th className="px-4 py-3 text-left font-medium text-gray-700">Date added</th>
+                      <td className="px-4 py-2">{/* Empty cell for Date column */}</td>
                     )}
-                    <th className="w-24 px-4 py-3 text-center font-medium text-gray-700">Options</th>
+                    <td className="px-4 py-2">{/* Empty cell for Options column */}</td>
+                  </tr>
+
+                  <tr className="border-b border-border bg-muted/50">
+                    {visibleColumns.ipAddress && (
+                      <th className="px-4 py-3 text-left text-sm font-medium text-foreground">IP address</th>
+                    )}
+                    {visibleColumns.dateAdded && (
+                      <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Date added</th>
+                    )}
+                    <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Options</th>
                   </tr>
                 </thead>
+
                 <tbody>
-                  {filteredData.map((item, index) => (
-                    <tr
-                      key={item.id}
-                      className={`border-b border-gray-100 hover:bg-gray-50 ${index % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
-                    >
-                      {visibleColumns.ipAddress && (
-                        <td className="px-4 py-3 font-medium text-gray-900">{item.ipAddress}</td>
-                      )}
-                      {visibleColumns.reason && <td className="px-4 py-3 text-gray-600">{item.reason}</td>}
-                      {visibleColumns.dateAdded && <td className="px-4 py-3 text-gray-600">{item.dateAdded}</td>}
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-blue-500 hover:bg-blue-50 hover:text-blue-700"
-                            onClick={() => handleEditItem(item)}
-                          >
-                            <Settings className="h-5 w-5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-red-500 hover:bg-red-50 hover:text-red-700"
-                            onClick={() => handleRemoveItem(item.id)}
-                          >
-                            <Trash2 className="h-5 w-5" />
-                          </Button>
+                  {filteredItems.length === 0 ? (
+                    <tr className="border-b border-border">
+                      <td className="px-4 py-3 text-sm" colSpan={Object.values(visibleColumns).filter(Boolean).length + 1}>
+                        <div className="flex items-center justify-center py-8 text-muted-foreground">
+                          {ipBlacklistItems.length === 0 ? "No results found." : "No matching results found."}
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    filteredItems.map((item) => (
+                      <tr key={item.id} className="border-b border-border hover:bg-muted/50">
+                        {visibleColumns.ipAddress && (
+                          <td className="px-4 py-3 text-sm text-blue-600">{item.ipAddress}</td>
+                        )}
+                        {visibleColumns.dateAdded && (
+                          <td className="px-4 py-3 text-sm text-muted-foreground">{item.dateAdded}</td>
+                        )}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEdit(item)}
+                              className="h-8 w-8 text-blue-600 hover:bg-blue-50"
+                              title="Update"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDelete(item.id)}
+                              className="h-8 w-8 text-red-600 hover:bg-red-50"
+                              title="Delete"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
+
               </table>
             </div>
 
-            <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-gray-50">
+            <div className="flex items-center justify-between border-t border-border px-4 py-3">
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" className="h-8 w-8 p-0 bg-transparent">
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <span className="text-sm text-gray-600 px-2">1</span>
-                <Button variant="outline" size="sm" className="h-8 w-8 p-0 bg-transparent">
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
+                <button className="rounded-md p-1 hover:bg-muted">
+                  <ChevronLeft className="h-5 w-5 text-muted-foreground" />
+                </button>
+                <button className="rounded-md p-1 hover:bg-muted">
+                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                </button>
               </div>
+              <select className="rounded-md border border-input bg-background px-2 py-1 text-sm">
+                <option value="10">10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
             </div>
           </div>
+
+          {/* Import Dialog */}
+          <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Import from CSV file</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="bg-blue-500 text-white p-3 rounded-md text-sm">
+                  <p className="font-medium">
+                    Please note, the csv file must contain a header with at least the ip_address column.
+                  </p>
+                  <p className="mt-1">
+                    If unsure about how to format your file, do an export first and see how the file looks.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">File</label>
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileSelect}
+                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 mt-6">
+                <Button variant="outline" onClick={() => setImportDialogOpen(false)}>
+                  Close
+                </Button>
+                <Button
+                  className="bg-blue-500 text-white hover:bg-blue-600"
+                  onClick={handleImportFile}
+                  disabled={!selectedFile}
+                >
+                  Import file
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Delete Confirmation Dialog */}
+          <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action cannot be undone. This will permanently delete the IP address from the blacklist.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setDeleteDialogOpen(false)}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleConfirmDelete} className="bg-red-600 hover:bg-red-700 text-white">
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Remove All Confirmation Dialog */}
+          <AlertDialog open={removeAllDialogOpen} onOpenChange={setRemoveAllDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Remove all IP addresses?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action cannot be undone. This will permanently delete all IP addresses from the blacklist.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setRemoveAllDialogOpen(false)}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleRemoveAll} className="bg-red-600 hover:bg-red-700 text-white">
+                  Remove All
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </>
       )}
     </div>
   )
 }
 
-function CreateIPBlacklistForm({
-  editingItem,
+function CreateIpBlacklistForm({
   onCancel,
   onSubmit,
 }: {
-  editingItem?: IPBlacklistEntry | null
   onCancel: () => void
-  onSubmit: (success: boolean, data?: { ipAddress: string; reason: string }) => void
+  onSubmit: (success: boolean, newItem?: IpBlacklistItem) => void
 }) {
-  const [ipAddress, setIpAddress] = useState(editingItem?.ipAddress || "")
-  const [reason, setReason] = useState(editingItem?.reason || "")
+  const [ipAddress, setIpAddress] = useState("")
 
-  const handleSubmit = () => {
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
     if (!ipAddress) {
       onSubmit(false)
       return
     }
-    onSubmit(true, { ipAddress, reason })
+
+    const now = new Date()
+    const dateString =
+      now.toLocaleDateString("en-US", {
+        month: "numeric",
+        day: "numeric",
+        year: "2-digit",
+      }) +
+      ", " +
+      now.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      })
+
+    const newItem: IpBlacklistItem = {
+      id: Date.now().toString(),
+      ipAddress,
+      dateAdded: dateString,
+    }
+
+    onSubmit(true, newItem)
   }
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="flex items-center text-xl font-semibold text-gray-900">
-          <Shield className="mr-2 h-5 w-5" />
-          {editingItem ? "Edit IP address in blacklist" : "Add a new IP address to blacklist"}
-        </h2>
-        <Button variant="outline" onClick={onCancel}>
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="flex items-center text-xl font-semibold">
+          <Ban className="mr-2 h-5 w-5" /> Add a new IP to blacklist
+        </h1>
+        <Button variant="default" className="bg-blue-500 text-white hover:bg-blue-600" onClick={onCancel}>
           Cancel
         </Button>
       </div>
 
-      <div className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-700">
-            IP Address <span className="text-red-500">*</span>
+          <label className="text-sm font-medium">
+            IP address <span className="text-red-500">*</span>
           </label>
           <Input
             type="text"
-            placeholder="Enter IP address"
+            placeholder="IP address"
             value={ipAddress}
             onChange={(e) => setIpAddress(e.target.value)}
-            className="w-full border-gray-300"
-            required
+            className="w-full"
           />
         </div>
 
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-700">Reason</label>
-          <Textarea
-            placeholder="Enter reason for blacklisting (optional)"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            className="min-h-[120px] w-full border-gray-300"
-          />
-        </div>
-
-        <div className="flex justify-end gap-3">
-          <Button type="button" variant="outline" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button type="button" className="bg-blue-500 text-white hover:bg-blue-600" onClick={handleSubmit}>
+        <div className="flex justify-end">
+          <Button type="submit" className="bg-blue-500 text-white hover:bg-blue-600">
             Save changes
           </Button>
         </div>
+      </form>
+    </div>
+  )
+}
+
+function UpdateIpBlacklistForm({
+  item,
+  onCancel,
+  onSubmit,
+}: {
+  item: IpBlacklistItem
+  onCancel: () => void
+  onSubmit: (success: boolean, updatedItem?: IpBlacklistItem) => void
+}) {
+  const [ipAddress, setIpAddress] = useState(item.ipAddress)
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!ipAddress) {
+      onSubmit(false)
+      return
+    }
+
+    const updatedItem: IpBlacklistItem = {
+      ...item,
+      ipAddress,
+    }
+
+    onSubmit(true, updatedItem)
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="flex items-center text-xl font-semibold">
+          <Ban className="mr-2 h-5 w-5" /> Update IP in blacklist
+        </h1>
+        <Button variant="default" className="bg-blue-500 text-white hover:bg-blue-600" onClick={onCancel}>
+          Cancel
+        </Button>
       </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">
+            IP address <span className="text-red-500">*</span>
+          </label>
+          <Input
+            type="text"
+            placeholder="IP address"
+            value={ipAddress}
+            onChange={(e) => setIpAddress(e.target.value)}
+            className="w-full"
+          />
+        </div>
+
+        <div className="flex justify-end">
+          <Button type="submit" className="bg-blue-500 text-white hover:bg-blue-600">
+            Update changes
+          </Button>
+        </div>
+      </form>
     </div>
   )
 }

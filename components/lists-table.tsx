@@ -11,13 +11,8 @@ import {
   Users,
   Download,
   ChevronLeft,
-  Edit,
-  Trash,
-  Copy,
   Info,
   X,
-  Upload,
-  ChevronDown,
 } from "lucide-react"
 
 // Custom Button component
@@ -236,6 +231,7 @@ interface EmailList {
   optOut: string
   dateAdded: string
   lastUpdated: string
+  archived?: boolean // Add this property
 }
 
 interface Column {
@@ -316,10 +312,10 @@ export default function EmailListManager() {
     { id: "optOut", label: "Opt out", visible: true },
     { id: "dateAdded", label: "Date added", visible: true },
     { id: "lastUpdated", label: "Last updated", visible: true },
+    { id: "action", label: "Action", visible: true },
   ])
   const [showColumnsDropdown, setShowColumnsDropdown] = useState(false)
   const [showActionsDropdown, setShowActionsDropdown] = useState(false)
-  const [selectedListIds, setSelectedListIds] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState("general")
   const [formData, setFormData] = useState<CreateListFormData>({
     name: "",
@@ -366,24 +362,45 @@ export default function EmailListManager() {
   })
 
   // Load lists from localStorage on component mount
-  useEffect(() => {
-    const storedLists = loadListsFromStorage()
-    // Sort by creation date (newest first)
-    const sortedLists = storedLists.sort((a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime())
-    setLists(sortedLists)
-    setFilteredLists(sortedLists)
-  }, [])
+const [isInitialLoad, setIsInitialLoad] = useState(true)
 
-  // Save lists to localStorage whenever lists change
-  useEffect(() => {
-    if (lists.length > 0 || typeof window !== "undefined") {
-      saveListsToStorage(lists)
+// Modify the initial load effect:
+useEffect(() => {
+  const storedLists = loadListsFromStorage()
+  const sortedLists = storedLists.sort((a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime())
+  setLists(sortedLists)
+  setFilteredLists(sortedLists)
+  setIsInitialLoad(false) // Mark initial load as complete
+}, [])
+
+// Fix the save effect:
+useEffect(() => {
+  if (!isInitialLoad && typeof window !== "undefined") { // Only save after initial load
+    saveListsToStorage(lists)
+  }
+}, [lists, isInitialLoad])
+
+
+  // Archive function
+  const handleArchiveList = (id: string) => {
+    if (window.confirm("Are you sure you want to archive this list?")) {
+      const updatedLists = lists.map((list) => {
+        if (list.id === id) {
+          return { ...list, archived: true, lastUpdated: new Date().toLocaleDateString() }
+        }
+        return list
+      })
+      setLists(updatedLists)
+      setSuccessMessage("List archived successfully!")
+      setShowSuccessToast(true)
+      setTimeout(() => setShowSuccessToast(false), 3000)
     }
-  }, [lists])
+  }
 
   // Filter lists based on search criteria
   useEffect(() => {
-    const filtered = lists.filter((list) => {
+    const activeListsOnly = lists.filter((list) => !list.archived)
+    const filtered = activeListsOnly.filter((list) => {
       return (
         list.uniqueId.toLowerCase().includes(searchFilters.uniqueId.toLowerCase()) &&
         list.name.toLowerCase().includes(searchFilters.name.toLowerCase()) &&
@@ -428,11 +445,30 @@ export default function EmailListManager() {
   // Add click outside handler to close dropdowns
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (!event.target.closest(".actions-dropdown")) {
-        setShowActionsDropdown(false)
-      }
       if (!event.target.closest(".columns-dropdown")) {
         setShowColumnsDropdown(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [])
+
+  // Add click outside handler to close action dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        !event.target.closest(".columns-dropdown") &&
+        !event.target.closest("[id^='action-dropdown-']") &&
+        !event.target.closest("button")
+      ) {
+        setShowColumnsDropdown(false)
+        // Close all action dropdowns
+        document.querySelectorAll('[id^="action-dropdown-"]').forEach((dropdown) => {
+          dropdown.classList.add("hidden")
+        })
       }
     }
 
@@ -688,7 +724,7 @@ export default function EmailListManager() {
       dateAdded: new Date().toLocaleDateString(),
       lastUpdated: new Date().toLocaleDateString(),
     }
-    const updatedLists = [newList, ...lists] // Add copy at the beginning
+    const updatedLists = [newList, ...lists]
     setLists(updatedLists)
     setSuccessMessage("List copied successfully!")
     setShowSuccessToast(true)
@@ -741,147 +777,6 @@ export default function EmailListManager() {
         },
       })
     }
-  }
-
-  // Handle checkbox selection for table rows
-  const handleRowSelection = (listId: string, checked: boolean) => {
-    if (checked) {
-      setSelectedListIds([...selectedListIds, listId])
-    } else {
-      setSelectedListIds(selectedListIds.filter((id) => id !== listId))
-    }
-  }
-
-  // Handle select all checkbox
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedListIds(filteredLists.map((list) => list.id))
-    } else {
-      setSelectedListIds([])
-    }
-  }
-
-  // Handle bulk actions
-  const handleBulkAction = (action: string) => {
-    // Auto-select single item if no selection and only one item exists
-    if (selectedListIds.length === 0 && filteredLists.length === 1) {
-      const singleListId = filteredLists[0].id
-      // Perform action directly on single item
-      switch (action) {
-        case "edit":
-          const list = lists.find((l) => l.id === singleListId)
-          if (list) handleEditList(list)
-          return
-        case "copy":
-          const listToCopy = lists.find((l) => l.id === singleListId)
-          if (listToCopy) handleCopyList(listToCopy)
-          return
-        case "delete":
-          if (window.confirm("Are you sure you want to delete this list?")) {
-            const updatedLists = lists.filter((list) => list.id !== singleListId)
-            setLists(updatedLists)
-            setSuccessMessage("List deleted successfully!")
-            setShowSuccessToast(true)
-            setTimeout(() => setShowSuccessToast(false), 3000)
-          }
-          return
-        case "export":
-          const selectedLists = filteredLists.filter((list) => list.id === singleListId)
-          const headers = visibleColumns.map((col) => col.label).join(",")
-          const rows = selectedLists.map((list) => {
-            const rowData = visibleColumns
-              .map((col) => {
-                const value = list[col.id as keyof EmailList]
-                return typeof value === "string" && value.includes(",") ? `"${value}"` : value
-              })
-              .join(",")
-            return rowData
-          })
-          const csvContent = [headers, ...rows].join("\n")
-          const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-          const link = document.createElement("a")
-          if (link.download !== undefined) {
-            const url = URL.createObjectURL(blob)
-            link.setAttribute("href", url)
-            link.setAttribute("download", `list-${new Date().toISOString().split("T")[0]}.csv`)
-            link.style.visibility = "hidden"
-            document.body.appendChild(link)
-            link.click()
-            document.body.removeChild(link)
-          }
-          setSuccessMessage("List exported successfully!")
-          setShowSuccessToast(true)
-          setTimeout(() => setShowSuccessToast(false), 3000)
-          return
-      }
-    }
-
-    if (selectedListIds.length === 0) {
-      setErrorMessage("Please select at least one list")
-      setShowErrorToast(true)
-      setTimeout(() => setShowErrorToast(false), 3000)
-      return
-    }
-
-    switch (action) {
-      case "edit":
-        if (selectedListIds.length === 1) {
-          const list = lists.find((l) => l.id === selectedListIds[0])
-          if (list) handleEditList(list)
-        } else {
-          setErrorMessage("Please select only one list to edit")
-          setShowErrorToast(true)
-          setTimeout(() => setShowErrorToast(false), 3000)
-        }
-        break
-      case "copy":
-        selectedListIds.forEach((id) => {
-          const list = lists.find((l) => l.id === id)
-          if (list) handleCopyList(list)
-        })
-        setSelectedListIds([])
-        break
-      case "delete":
-        if (window.confirm(`Are you sure you want to delete ${selectedListIds.length} list(s)?`)) {
-          const updatedLists = lists.filter((list) => !selectedListIds.includes(list.id))
-          setLists(updatedLists)
-          setSelectedListIds([])
-          setSuccessMessage(`${selectedListIds.length} list(s) deleted successfully!`)
-          setShowSuccessToast(true)
-          setTimeout(() => setShowSuccessToast(false), 3000)
-        }
-        break
-      case "export":
-        // Export selected lists
-        const selectedLists = filteredLists.filter((list) => selectedListIds.includes(list.id))
-        const headers = visibleColumns.map((col) => col.label).join(",")
-        const rows = selectedLists.map((list) => {
-          const rowData = visibleColumns
-            .map((col) => {
-              const value = list[col.id as keyof EmailList]
-              return typeof value === "string" && value.includes(",") ? `"${value}"` : value
-            })
-            .join(",")
-          return rowData
-        })
-        const csvContent = [headers, ...rows].join("\n")
-        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-        const link = document.createElement("a")
-        if (link.download !== undefined) {
-          const url = URL.createObjectURL(blob)
-          link.setAttribute("href", url)
-          link.setAttribute("download", `selected-lists-${new Date().toISOString().split("T")[0]}.csv`)
-          link.style.visibility = "hidden"
-          document.body.appendChild(link)
-          link.click()
-          document.body.removeChild(link)
-        }
-        setSuccessMessage("Selected lists exported successfully!")
-        setShowSuccessToast(true)
-        setTimeout(() => setShowSuccessToast(false), 3000)
-        break
-    }
-    setShowActionsDropdown(false)
   }
 
   const visibleColumns = columns.filter((col) => col.visible)
@@ -1496,51 +1391,6 @@ export default function EmailListManager() {
             <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Lists</h1>
           </div>
           <div className="flex flex-wrap gap-1 sm:gap-2">
-            {/* Actions Dropdown */}
-            <div className="relative actions-dropdown">
-              <button
-                className="bg-blue-500 text-white hover:bg-blue-600 px-2 sm:px-3 py-1 sm:py-2 rounded text-xs sm:text-sm flex items-center gap-1 font-medium transition-colors"
-                onClick={() => setShowActionsDropdown(!showActionsDropdown)}
-                disabled={selectedListIds.length === 0 && filteredLists.length > 1}
-              >
-                Actions
-                <ChevronDown className="h-3 w-3 sm:h-4 sm:w-4" />
-              </button>
-              {showActionsDropdown && (
-                <div className="absolute top-full left-0 mt-1 w-40 bg-white rounded-md shadow-lg border z-50">
-                  <div className="py-1">
-                    <button
-                      onClick={() => handleBulkAction("edit")}
-                      className="flex items-center gap-2 w-full px-4 py-2 text-xs text-left text-gray-700 hover:bg-gray-100"
-                    >
-                      <Edit className="h-3 w-3" /> Edit
-                    </button>
-                    <button
-                      onClick={() => handleBulkAction("copy")}
-                      className="flex items-center gap-2 w-full px-4 py-2 text-xs text-left text-gray-700 hover:bg-gray-100"
-                    >
-                      <Copy className="h-3 w-3" /> Copy
-                    </button>
-                    <button
-                      onClick={() => handleBulkAction("export")}
-                      className="flex items-center gap-2 w-full px-4 py-2 text-xs text-left text-gray-700 hover:bg-gray-100"
-                    >
-                      <Download className="h-3 w-3" /> Export
-                    </button>
-                    <button className="flex items-center gap-2 w-full px-4 py-2 text-xs text-left text-gray-700 hover:bg-gray-100">
-                      <Upload className="h-3 w-3" /> Import
-                    </button>
-                    <button
-                      onClick={() => handleBulkAction("delete")}
-                      className="flex items-center gap-2 w-full px-4 py-2 text-xs text-left text-red-600 hover:bg-red-50"
-                    >
-                      <Trash className="h-3 w-3" /> Delete
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
             <div className="relative columns-dropdown">
               <button
                 className="bg-blue-500 text-white hover:bg-blue-600 px-2 sm:px-3 py-1 sm:py-2 rounded text-xs sm:text-sm flex items-center gap-1 font-medium transition-colors"
@@ -1625,9 +1475,6 @@ export default function EmailListManager() {
             {filteredLists.length !== lists.length && (
               <span className="ml-2 text-blue-600">({filteredLists.length} filtered)</span>
             )}
-            {selectedListIds.length > 0 && (
-              <span className="ml-2 text-green-600">({selectedListIds.length} selected)</span>
-            )}
           </div>
           {Object.values(searchFilters).some((filter) => filter !== "") && (
             <button
@@ -1677,14 +1524,6 @@ export default function EmailListManager() {
             <table className="w-full min-w-[600px]">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="w-10 px-2 py-2 sm:py-3 text-left">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      checked={selectedListIds.length === filteredLists.length && filteredLists.length > 0}
-                      onChange={(e) => handleSelectAll(e.target.checked)}
-                    />
-                  </th>
                   {visibleColumns.map((column) => (
                     <th
                       key={column.id}
@@ -1698,7 +1537,7 @@ export default function EmailListManager() {
               <tbody>
                 {filteredLists.length === 0 ? (
                   <tr>
-                    <td colSpan={visibleColumns.length + 1} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={visibleColumns.length} className="px-4 py-8 text-center text-gray-500">
                       {Object.values(searchFilters).some((filter) => filter !== "")
                         ? "No lists match your search criteria"
                         : "No lists found"}
@@ -1707,14 +1546,6 @@ export default function EmailListManager() {
                 ) : (
                   filteredLists.map((list) => (
                     <tr key={list.id} className="border-b border-gray-200 hover:bg-gray-50">
-                      <td className="w-10 px-2 py-2 sm:py-3">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          checked={selectedListIds.includes(list.id)}
-                          onChange={(e) => handleRowSelection(list.id, e.target.checked)}
-                        />
-                      </td>
                       {visibleColumns.map((column) => (
                         <td key={column.id} className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-gray-700">
                           {column.id === "uniqueId" || column.id === "name" || column.id === "displayName" ? (
@@ -1729,6 +1560,116 @@ export default function EmailListManager() {
                           )}
                         </td>
                       ))}
+                      <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm">
+                        <div className="relative">
+                          <button
+                            className="p-1 hover:bg-gray-100 rounded text-gray-600 hover:text-gray-800 transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              // Close all other action rows first
+                              document.querySelectorAll('[id^="action-row-"]').forEach((row) => {
+                                if (row.id !== `action-row-${list.id}`) {
+                                  row.classList.add("hidden")
+                                }
+                              })
+                              // Toggle current action row
+                              const actionRow = document.getElementById(`action-row-${list.id}`)
+                              if (actionRow) {
+                                actionRow.classList.toggle("hidden")
+                              }
+                            }}
+                          >
+                            <span className="text-sm">⚙️</span>
+                          </button>
+                          <div
+                            id={`action-row-${list.id}`}
+                            className="absolute right-full top-1/2 transform -translate-y-1/2 mr-2 z-50 hidden"
+                          >
+                            {/* Horizontal action buttons row */}
+                            <div className="flex items-center space-x-1">
+                              {/* Horizontal action buttons */}
+                              {/* Menu Items */}
+                              {/* EDIT BUTTON */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleEditList(list)
+                                  document.getElementById(`action-row-${list.id}`)?.classList.add("hidden")
+                                }}
+                                className="w-8 h-8 bg-blue-400 hover:bg-blue-500 rounded flex items-center justify-center transition-colors"
+                                title="Edit"
+                              >
+                                <span className="text-white text-xs">✏️</span>
+                              </button>
+
+                              {/* COPY BUTTON */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleCopyList(list)
+                                  document.getElementById(`action-row-${list.id}`)?.classList.add("hidden")
+                                }}
+                                className="w-8 h-8 bg-blue-400 hover:bg-blue-500 rounded flex items-center justify-center transition-colors"
+                                title="Copy"
+                              >
+                                <span className="text-white text-xs">📋</span>
+                              </button>
+
+                              {/* EXPORT BUTTON */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  // Export logic here...
+                                  document.getElementById(`action-row-${list.id}`)?.classList.add("hidden")
+                                }}
+                                className="w-8 h-8 bg-blue-400 hover:bg-blue-500 rounded flex items-center justify-center transition-colors"
+                                title="Export"
+                              >
+                                <span className="text-white text-xs">📤</span>
+                              </button>
+
+                              {/* ARCHIVE BUTTON */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleArchiveList(list.id)
+                                  document.getElementById(`action-row-${list.id}`)?.classList.add("hidden")
+                                }}
+                                className="w-8 h-8 bg-blue-400 hover:bg-blue-500 rounded flex items-center justify-center transition-colors"
+                                title="Archive"
+                              >
+                                <span className="text-white text-xs">📦</span>
+                              </button>
+
+                              {/* DELETE BUTTON */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleDeleteList(list.id)
+                                  document.getElementById(`action-row-${list.id}`)?.classList.add("hidden")
+                                }}
+                                className="w-8 h-8 bg-red-400 hover:bg-red-500 rounded flex items-center justify-center transition-colors"
+                                title="Delete"
+                              >
+                                <span className="text-white text-xs">🗑️</span>
+                              </button>
+
+                              {/* SETTINGS BUTTON */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  // Settings logic here...
+                                  document.getElementById(`action-row-${list.id}`)?.classList.add("hidden")
+                                }}
+                                className="w-8 h-8 bg-blue-400 hover:bg-blue-500 rounded flex items-center justify-center transition-colors"
+                                title="Settings"
+                              >
+                                <span className="text-white text-xs">⚙️</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
                     </tr>
                   ))
                 )}

@@ -28,6 +28,7 @@ interface ListData {
   name: string
   displayName: string
   subscribersCount: number
+  segmentsCount: number
   optIn: string
   optOut: string
   dateAdded: string
@@ -40,11 +41,12 @@ interface MetricCardProps {
   label: string
   subtitle?: string
   color?: string
+  href?: string
 }
 
-const MetricCard = ({ icon, value, label, subtitle, color = "text-blue-500" }: MetricCardProps) => {
-  return (
-    <div className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
+const MetricCard = ({ icon, value, label, subtitle, color = "text-blue-500", href }: MetricCardProps) => {
+  const content = (
+    <div className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer">
       <div className="flex items-center justify-between mb-4">
         <div className={`p-2 rounded-lg bg-gray-50 ${color}`}>{icon}</div>
       </div>
@@ -55,6 +57,12 @@ const MetricCard = ({ icon, value, label, subtitle, color = "text-blue-500" }: M
       </div>
     </div>
   )
+
+  if (href) {
+    return <Link href={href}>{content}</Link>
+  }
+
+  return content
 }
 
 const ChartPlaceholder = () => {
@@ -106,31 +114,69 @@ export default function ListDetailPage() {
   const [listData, setListData] = useState<ListData | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    const fetchListData = async () => {
-      try {
-        // Mock data - replace with actual API call
-        const mockData: ListData = {
-          id: listId,
-          uniqueId: "shyamashree",
-          name: "shyamashree",
-          displayName: "Shyamashree Newsletter",
-          subscribersCount: 0,
-          optIn: "double",
-          optOut: "single",
-          dateAdded: "2024-01-15",
-          lastUpdated: "2024-01-15",
-        }
+  // Function to load subscriber count from localStorage
+  const loadSubscriberCount = () => {
+    try {
+      const savedSubscribers = localStorage.getItem(`subscribers_${listId}`)
+      const subscribersData = savedSubscribers ? JSON.parse(savedSubscribers) : []
+      return subscribersData.length
+    } catch (error) {
+      console.error("Error loading subscriber count:", error)
+      return 0
+    }
+  }
 
-        setListData(mockData)
-      } catch (error) {
-        console.error("Error fetching list data:", error)
-      } finally {
-        setLoading(false)
+  const fetchListData = async () => {
+    try {
+      // Get current subscriber count from localStorage
+      const currentSubscriberCount = loadSubscriberCount()
+
+      // Mock data - replace with actual API call
+      const mockData: ListData = {
+        id: listId,
+        uniqueId: "shyamashree",
+        name: "shyamashree",
+        displayName: "Shyamashree Newsletter",
+        subscribersCount: currentSubscriberCount, // Use actual count from localStorage
+        segmentsCount: currentSubscriberCount, // Segments count equals subscriber count
+        optIn: "double",
+        optOut: "single",
+        dateAdded: "2024-01-15",
+        lastUpdated: "2024-01-15",
+      }
+
+      setListData(mockData)
+    } catch (error) {
+      console.error("Error fetching list data:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchListData()
+  }, [listId])
+
+  // Add event listener for focus to reload data when returning to page
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchListData()
+    }
+
+    window.addEventListener("focus", handleFocus)
+    return () => window.removeEventListener("focus", handleFocus)
+  }, [listId])
+
+  // Add visibility change listener for better mobile support
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchListData()
       }
     }
 
-    fetchListData()
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
   }, [listId])
 
   const handleCreateNew = () => {
@@ -207,20 +253,6 @@ export default function ListDetailPage() {
                     Back to Lists
                   </Link>
                 </div>
-                <div className="flex gap-3">
-                  <button
-                    onClick={handleCreateNew}
-                    className="bg-blue-500 text-white hover:bg-blue-600 px-4 py-2 rounded-md font-medium transition-colors"
-                  >
-                    Create new
-                  </button>
-                  <button
-                    onClick={handleUpdate}
-                    className="bg-blue-500 text-white hover:bg-blue-600 px-4 py-2 rounded-md font-medium transition-colors"
-                  >
-                    Update
-                  </button>
-                </div>
               </div>
 
               {/* Tabs */}
@@ -239,8 +271,15 @@ export default function ListDetailPage() {
                   value={listData.subscribersCount}
                   label="Subscribers"
                   color="text-blue-500"
+                  href={`/lists/${listId}/subscribers`}
                 />
-                <MetricCard icon={<Target className="h-6 w-6" />} value={0} label="Segments" color="text-blue-500" />
+                <MetricCard
+                  icon={<Target className="h-6 w-6" />}
+                  value={listData.segmentsCount}
+                  label="Segments"
+                  color="text-blue-500"
+                  href={`/lists/${listId}/segment`}
+                />
                 <MetricCard
                   icon={<Settings className="h-6 w-6" />}
                   value={3}

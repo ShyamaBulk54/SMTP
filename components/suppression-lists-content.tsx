@@ -1,94 +1,66 @@
 "use client"
-
-import { useState, useEffect } from "react"
-import {
-  Ban,
-  Plus,
-  Upload,
-  RefreshCw,
-  X,
-  Download,
-  Trash2,
-  ChevronLeft,
-  ChevronRight,
-  Settings,
-  MoreHorizontal,
-} from "lucide-react"
+import React, { useState, useEffect } from "react"
+import { Ban, PlusCircle, RefreshCw, X, Eye, Edit, Trash2, Download, ChevronDown, SlidersHorizontal } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useRouter } from "next/navigation"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Input } from "@/components/ui/input"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuCheckboxItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
-interface SuppressionEntry {
+interface SuppressionList {
   id: string
-  listName: string
-  displayName: string
-  subscribersCount: number
-  optIn: number
-  optOut: number
+  list: string
+  name: string
   dateAdded: string
   lastUpdated: string
 }
 
-const loadSuppressionFromStorage = (): SuppressionEntry[] => {
-  if (typeof window === "undefined") return []
-  const saved = localStorage.getItem("suppressionData")
-  return saved ? JSON.parse(saved) : []
-}
-
-const saveSuppressionToStorage = (data: SuppressionEntry[]) => {
-  if (typeof window === "undefined") return
-  localStorage.setItem("suppressionData", JSON.stringify(data))
-}
+type SortField = "list" | "name" | "dateAdded" | "lastUpdated"
+type SortDirection = "asc" | "desc"
 
 export default function SuppressionListsContent() {
+  const router = useRouter()
   const [showCreateForm, setShowCreateForm] = useState(false)
-  const [showSuccess, setShowSuccess] = useState(false)
   const [showError, setShowError] = useState(false)
-  const [searchList, setSearchList] = useState("")
-  const [searchDisplay, setSearchDisplay] = useState("")
-  const [searchDate, setSearchDate] = useState("")
-  const [editingItem, setEditingItem] = useState<SuppressionEntry | null>(null)
-  const [showImportModal, setShowImportModal] = useState(false)
-  const [importFile, setImportFile] = useState<File | null>(null)
+  const [showSuccess, setShowSuccess] = useState(false)
+  const [suppressionLists, setSuppressionLists] = useState<SuppressionList[]>([])
+  const [listSearch, setListSearch] = useState("")
+  const [nameSearch, setNameSearch] = useState("")
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [itemToDelete, setItemToDelete] = useState<string | null>(null)
+  const [editingItem, setEditingItem] = useState<SuppressionList | null>(null)
+  const [sortField, setSortField] = useState<SortField>("dateAdded")
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
   const [visibleColumns, setVisibleColumns] = useState({
-    listName: true,
-    displayName: true,
-    subscribersCount: true,
-    optIn: true,
-    optOut: true,
+    list: true,
+    name: true,
     dateAdded: true,
     lastUpdated: true,
   })
+  const [showColumnsDropdown, setShowColumnsDropdown] = useState(false)
 
-  const [suppressionData, setSuppressionData] = useState<SuppressionEntry[]>(() => {
-    const storedData = loadSuppressionFromStorage()
-    return storedData
-  })
-  const [isInitialLoad, setIsInitialLoad] = useState(true)
-
+  // Add click outside handler to close dropdown
   useEffect(() => {
-    const storedData = loadSuppressionFromStorage()
-    const sortedData = storedData.sort((a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime())
-    setSuppressionData(sortedData)
-    setIsInitialLoad(false)
-  }, [])
-
-  useEffect(() => {
-    if (!isInitialLoad && typeof window !== "undefined") {
-      saveSuppressionToStorage(suppressionData)
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!event.target || !(event.target as Element).closest(".columns-dropdown")) {
+        setShowColumnsDropdown(false)
+      }
     }
-  }, [suppressionData, isInitialLoad])
 
-  const handleRefresh = () => {
-    window.location.reload()
-  }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [])
 
   const handleToggleColumn = (column: keyof typeof visibleColumns) => {
     setVisibleColumns((prev) => ({
@@ -97,158 +69,189 @@ export default function SuppressionListsContent() {
     }))
   }
 
-  const handleRemoveItem = (id: string) => {
-    setSuppressionData((prev) => prev.filter((item) => item.id !== id))
+  // Load data from localStorage on component mount
+  useEffect(() => {
+    const savedData = localStorage.getItem('suppressionLists')
+    if (savedData) {
+      try {
+        setSuppressionLists(JSON.parse(savedData))
+      } catch (error) {
+        console.error('Error parsing saved data:', error)
+        setSuppressionLists([])
+      }
+    }
+  }, [])
+
+  // Save data to localStorage whenever suppressionLists changes
+ // Save data to localStorage whenever suppressionLists changes
+useEffect(() => {
+  if (suppressionLists.length > 0) {
+    localStorage.setItem('suppressionLists', JSON.stringify(suppressionLists))
+  } else {
+    // Clear localStorage when no items exist
+    localStorage.removeItem('suppressionLists')
+  }
+}, [suppressionLists])
+
+  const handleRefresh = () => {
+    // Instead of router.refresh(), just reload data from localStorage
+    const savedData = localStorage.getItem('suppressionLists')
+    if (savedData) {
+      try {
+        setSuppressionLists(JSON.parse(savedData))
+      } catch (error) {
+        console.error('Error parsing saved data:', error)
+        setSuppressionLists([])
+      }
+    }
   }
 
-  const handleEditItem = (item: SuppressionEntry) => {
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc")
+    } else {
+      setSortField(field)
+      setSortDirection("asc")
+    }
+  }
+
+  const handleDelete = (id: string) => {
+    setItemToDelete(id)
+    setDeleteDialogOpen(true)
+  }
+
+  const confirmDelete = () => {
+    if (itemToDelete) {
+      setSuppressionLists((prev) => prev.filter((item) => item.id !== itemToDelete))
+      setDeleteDialogOpen(false)
+      setItemToDelete(null)
+    }
+  }
+
+  const handleView = (item: SuppressionList) => {
+    // View functionality - could open a modal or navigate to detail page
+    console.log("Viewing:", item)
+  }
+
+  const handleEdit = (item: SuppressionList) => {
     setEditingItem(item)
     setShowCreateForm(true)
   }
 
-  const handleExportCSV = () => {
-    const headers = [
-      "List Name",
-      "Display Name",
-      "Subscribers Count",
-      "Opt In",
-      "Opt Out",
-      "Date Added",
-      "Last Updated",
-    ]
-    const csvContent = [
-      headers.join(","),
-      ...suppressionData.map((item) =>
-        [
-          `"${item.listName}"`,
-          `"${item.displayName}"`,
-          item.subscribersCount,
-          item.optIn,
-          item.optOut,
-          `"${item.dateAdded}"`,
-          `"${item.lastUpdated}"`,
-        ].join(","),
-      ),
-    ].join("\n")
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-    const link = document.createElement("a")
-    const url = URL.createObjectURL(blob)
-    link.setAttribute("href", url)
-    link.setAttribute("download", "suppression-lists.csv")
-    link.style.visibility = "hidden"
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
-
-  const handleImportCSV = () => {
-    if (!importFile) return
-
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const text = e.target?.result as string
-        if (!text) return
-
-        const lines = text.split("\n").filter((line) => line.trim())
-        if (lines.length < 2) return
-
-        const newEntries: SuppressionEntry[] = []
-        for (let i = 1; i < lines.length; i++) {
-          const values = lines[i].split(",")
-          if (values.length >= 1 && values[0]?.trim()) {
-            newEntries.push({
-              id: Date.now().toString() + i,
-              listName: values[0].replace(/"/g, "").trim(),
-              displayName: values[1] ? values[1].replace(/"/g, "").trim() : "Imported List",
-              subscribersCount: values[2] ? Number.parseInt(values[2]) || 0 : 0,
-              optIn: values[3] ? Number.parseInt(values[3]) || 0 : 0,
-              optOut: values[4] ? Number.parseInt(values[4]) || 0 : 0,
-              dateAdded: new Date().toLocaleString(),
-              lastUpdated: new Date().toLocaleString(),
-            })
-          }
-        }
-
-        if (newEntries.length > 0) {
-          setSuppressionData((prev) => [...prev, ...newEntries])
-          setShowSuccess(true)
-        }
-
-        setShowImportModal(false)
-        setImportFile(null)
-      } catch (error) {
-        console.error("Error importing CSV:", error)
-        setShowError(true)
-        setShowImportModal(false)
-        setImportFile(null)
-      }
-    }
-
-    reader.onerror = () => {
-      setShowError(true)
-      setShowImportModal(false)
-      setImportFile(null)
-    }
-
-    reader.readAsText(importFile)
-  }
-
-  const filteredData = suppressionData.filter((item) => {
-    return (
-      item.listName.toLowerCase().includes(searchList.toLowerCase()) &&
-      item.displayName.toLowerCase().includes(searchDisplay.toLowerCase()) &&
-      item.dateAdded.toLowerCase().includes(searchDate.toLowerCase())
-    )
+  const filteredLists = suppressionLists.filter((item) => {
+    const matchesList = item.list.toLowerCase().includes(listSearch.toLowerCase())
+    const matchesName = item.name.toLowerCase().includes(nameSearch.toLowerCase())
+    return matchesList && matchesName
   })
 
-  if (suppressionData.length === 0 && !showCreateForm) {
+  // Sort the filtered lists
+  const sortedLists = [...filteredLists].sort((a, b) => {
+    const aValue = a[sortField]
+    const bValue = b[sortField]
+
+    if (sortDirection === "asc") {
+      return aValue.localeCompare(bValue)
+    } else {
+      return bValue.localeCompare(aValue)
+    }
+  })
+
+  if (showCreateForm) {
     return (
-      <div className="flex flex-col gap-6">
+      <CreateSuppressionListForm
+        editingItem={editingItem}
+        onCancel={() => {
+          setShowCreateForm(false)
+          setEditingItem(null)
+        }}
+        onSubmit={(success, data) => {
+          if (success && data) {
+            if (editingItem) {
+              // Update existing item
+              setSuppressionLists((prev) =>
+                prev.map((item) => (item.id === editingItem.id ? { ...data, id: editingItem.id } : item)),
+              )
+            } else {
+              // Add new item
+              const newItem: SuppressionList = {
+                ...data,
+                id: Date.now().toString(),
+              }
+              setSuppressionLists((prev) => [...prev, newItem])
+            }
+            setShowCreateForm(false)
+            setEditingItem(null)
+            setShowSuccess(true)
+            setTimeout(() => setShowSuccess(false), 330)
+          } else {
+            setShowError(true)
+          }
+        }}
+      />
+    )
+  }
+
+  // Show empty state when no suppression lists exist
+  if (suppressionLists.length === 0) {
+    return (
+      <div className="flex flex-col gap-4">
+        {showError && (
+          <Alert variant="destructive" className="bg-red-500 text-white">
+            <AlertDescription className="flex items-center justify-between">
+              <span>→ Your form has a few errors, please fix them and try again!</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowError(false)}
+                className="h-5 w-5 rounded-full p-0 text-white hover:bg-red-600"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="flex items-center justify-between">
           <h1 className="flex items-center text-xl font-semibold">
-            <Ban className="mr-2 h-5 w-5" /> Suppression Lists
+            <Ban className="mr-2 h-5 w-5" /> Suppression lists
           </h1>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
             <Button
               variant="default"
               className="bg-blue-500 text-white hover:bg-blue-600"
               onClick={() => setShowCreateForm(true)}
             >
-              <Plus className="mr-2 h-4 w-4" />
-              Create new
+              <PlusCircle className="mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">Create new</span>
+              <span className="sm:hidden">New</span>
             </Button>
-            <Button
-              variant="default"
-              className="bg-blue-500 text-white hover:bg-blue-600"
-              onClick={() => setShowImportModal(true)}
-            >
-              <Upload className="mr-2 h-4 w-4" />
-              Import
-            </Button>
+
             <Button variant="default" className="bg-blue-500 text-white hover:bg-blue-600" onClick={handleRefresh}>
               <RefreshCw className="mr-2 h-4 w-4" />
-              Refresh
+              <span className="hidden sm:inline">Refresh</span>
             </Button>
           </div>
         </div>
 
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-            <Ban className="h-12 w-12 text-gray-400" />
+        <div className="rounded-md border border-border p-4 sm:p-8">
+          <div className="flex flex-col items-center justify-center text-center">
+            <div className="mb-4 rounded-full bg-gray-200 p-4">
+              <Ban className="h-12 w-12 text-gray-500" />
+            </div>
+            <h2 className="mb-2 text-xl font-semibold">Manage your suppression lists</h2>
+            <p className="max-w-md text-muted-foreground">
+              Create your own suppression lists where you can import email addresses that will never receive emails from
+              you. You will be able to select these lists to be used in various places, such as when sending a campaign.
+            </p>
           </div>
-          <h2 className="text-2xl font-semibold text-gray-700 mb-2">Manage your suppression lists</h2>
-          <p className="text-gray-500 max-w-md">
-            Create and manage suppression lists to control which subscribers receive your campaigns.
-          </p>
         </div>
       </div>
     )
   }
 
+  // Show table view when suppression lists exist
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       {showSuccess && (
         <Alert className="bg-green-500 text-white border-green-500">
           <AlertDescription className="flex items-center justify-between">
@@ -281,391 +284,330 @@ export default function SuppressionListsContent() {
         </Alert>
       )}
 
-      <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Import from CSV file</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="bg-blue-500 text-white p-3 rounded text-sm">
-              Please note, the csv file must contain a header with at least the list name column. If unsure about how to
-              format your file, do an export first and see how the file looks.
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">File</label>
-              <Input
-                type="file"
-                accept=".csv"
-                onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-                className="cursor-pointer"
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowImportModal(false)}>
-                Close
-              </Button>
-              <Button
-                className="bg-blue-500 text-white hover:bg-blue-600"
-                onClick={handleImportCSV}
-                disabled={!importFile}
-              >
-                Import file
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {showCreateForm ? (
-        <CreateSuppressionForm
-          editingItem={editingItem}
-          onCancel={() => {
-            setShowCreateForm(false)
-            setEditingItem(null)
-          }}
-          onSubmit={(success, data) => {
-            if (success && data) {
-              if (editingItem) {
-                setSuppressionData((prev) =>
-                  prev.map((item) =>
-                    item.id === editingItem.id
-                      ? {
-                          ...item,
-                          listName: data.listName,
-                          displayName: data.displayName,
-                          lastUpdated: new Date().toLocaleString(),
-                        }
-                      : item,
-                  ),
-                )
-              } else {
-                setSuppressionData((prev) => [
-                  ...prev,
-                  {
-                    id: Date.now().toString(),
-                    listName: data.listName,
-                    displayName: data.displayName,
-                    subscribersCount: 0,
-                    optIn: 0,
-                    optOut: 0,
-                    dateAdded: new Date().toLocaleString(),
-                    lastUpdated: new Date().toLocaleString(),
-                  },
-                ])
-              }
-              setShowCreateForm(false)
-              setEditingItem(null)
-              setShowSuccess(true)
-            } else {
-              setShowError(true)
-            }
-          }}
-        />
-      ) : (
-        <>
-          <div className="flex items-center justify-between">
-            <h1 className="flex items-center text-xl font-semibold">
-              <Ban className="mr-2 h-5 w-5" /> Suppression Lists
-            </h1>
-            <div className="flex flex-wrap items-center gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="bg-blue-500 text-white hover:bg-blue-600 px-3 py-2 rounded text-sm flex items-center gap-2 font-medium transition-colors"
-                  >
-                    <MoreHorizontal className="h-4 w-4" />
-                    Toggle columns
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuCheckboxItem
-                    checked={visibleColumns.listName}
-                    onCheckedChange={() => handleToggleColumn("listName")}
-                  >
-                    List name
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuCheckboxItem
-                    checked={visibleColumns.displayName}
-                    onCheckedChange={() => handleToggleColumn("displayName")}
-                  >
-                    Display name
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuCheckboxItem
-                    checked={visibleColumns.subscribersCount}
-                    onCheckedChange={() => handleToggleColumn("subscribersCount")}
-                  >
-                    Subscribers count
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuCheckboxItem
-                    checked={visibleColumns.optIn}
-                    onCheckedChange={() => handleToggleColumn("optIn")}
-                  >
-                    Opt in
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuCheckboxItem
-                    checked={visibleColumns.optOut}
-                    onCheckedChange={() => handleToggleColumn("optOut")}
-                  >
-                    Opt out
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuCheckboxItem
-                    checked={visibleColumns.dateAdded}
-                    onCheckedChange={() => handleToggleColumn("dateAdded")}
-                  >
-                    Date added
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuCheckboxItem
-                    checked={visibleColumns.lastUpdated}
-                    onCheckedChange={() => handleToggleColumn("lastUpdated")}
-                  >
-                    Last updated
-                  </DropdownMenuCheckboxItem>
-                  <div className="px-2 py-1.5 border-t">
-                    <Button size="sm" className="w-full bg-blue-500 text-white hover:bg-blue-600">
-                      Save changes
-                    </Button>
-                  </div>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <Button
-                variant="default"
-                size="sm"
-                className="bg-blue-500 text-white hover:bg-blue-600 px-3 py-2 rounded text-sm flex items-center gap-2 font-medium transition-colors"
-                onClick={() => setShowCreateForm(true)}
-              >
-                <Plus className="h-4 w-4" />
-                Create new
-              </Button>
-
-              <Button
-                variant="default"
-                size="sm"
-                className="bg-blue-500 text-white hover:bg-blue-600 px-3 py-2 rounded text-sm flex items-center gap-2 font-medium transition-colors"
-                onClick={handleExportCSV}
-              >
-                <Download className="h-4 w-4" />
-                Export
-              </Button>
-
-              <Button
-                variant="default"
-                size="sm"
-                className="bg-blue-500 text-white hover:bg-blue-600 px-3 py-2 rounded text-sm flex items-center gap-2 font-medium transition-colors"
-                onClick={() => setShowImportModal(true)}
-              >
-                <Upload className="h-4 w-4" />
-                Import
-              </Button>
-
-              <Button
-                variant="default"
-                size="sm"
-                className="bg-blue-500 text-white hover:bg-blue-600 px-3 py-2 rounded text-sm flex items-center gap-2 font-medium transition-colors"
-                onClick={handleRefresh}
-              >
-                <RefreshCw className="h-4 w-4" />
-                Refresh
-              </Button>
-            </div>
-          </div>
-
-          <div className="text-sm text-gray-600 mb-2">
-            Displaying {filteredData.length} of {suppressionData.length} result{suppressionData.length !== 1 ? "s" : ""}
-          </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-            <div className="border-b border-gray-200 p-4">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                {visibleColumns.listName && (
-                  <div>
-                    <Input
-                      placeholder="Search list..."
-                      value={searchList}
-                      onChange={(e) => setSearchList(e.target.value)}
-                      className="h-8 text-sm border-gray-300 w-32"
+      <div className="flex items-center justify-between">
+        <h1 className="flex items-center text-xl font-semibold">
+          <Ban className="mr-2 h-5 w-5" /> Suppression lists
+        </h1>
+        <div className="flex items-center gap-2">
+          <div className="relative columns-dropdown">
+            <Button
+              variant="default"
+              className="bg-blue-500 text-white hover:bg-blue-600"
+              onClick={() => setShowColumnsDropdown(!showColumnsDropdown)}
+            >
+              <SlidersHorizontal className="mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">Toggle columns</span>
+              <span className="sm:hidden">Columns</span>
+            </Button>
+            {showColumnsDropdown && (
+              <div className="absolute top-full right-0 mt-1 w-48 sm:w-56 bg-white rounded-md shadow-lg border z-50">
+                <div className="p-3">
+                  <div className="flex items-center space-x-2 py-1">
+                    <input
+                      type="checkbox"
+                      id="list"
+                      checked={visibleColumns.list}
+                      onChange={() => handleToggleColumn("list")}
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
+                    <label htmlFor="list" className="text-sm font-medium text-gray-700">
+                      List
+                    </label>
                   </div>
-                )}
-                {visibleColumns.displayName && (
-                  <div>
-                    <Input
-                      placeholder="Search display..."
-                      value={searchDisplay}
-                      onChange={(e) => setSearchDisplay(e.target.value)}
-                      className="h-8 text-sm border-gray-300 w-32"
+                  <div className="flex items-center space-x-2 py-1">
+                    <input
+                      type="checkbox"
+                      id="name"
+                      checked={visibleColumns.name}
+                      onChange={() => handleToggleColumn("name")}
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
+                    <label htmlFor="name" className="text-sm font-medium text-gray-700">
+                      Name
+                    </label>
                   </div>
-                )}
-                {visibleColumns.dateAdded && (
-                  <div>
-                    <Input
-                      placeholder="Search date..."
-                      value={searchDate}
-                      onChange={(e) => setSearchDate(e.target.value)}
-                      className="h-8 text-sm border-gray-300 w-32"
+                  <div className="flex items-center space-x-2 py-1">
+                    <input
+                      type="checkbox"
+                      id="dateAdded"
+                      checked={visibleColumns.dateAdded}
+                      onChange={() => handleToggleColumn("dateAdded")}
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
+                    <label htmlFor="dateAdded" className="text-sm font-medium text-gray-700">
+                      Date added
+                    </label>
                   </div>
-                )}
+                  <div className="flex items-center space-x-2 py-1">
+                    <input
+                      type="checkbox"
+                      id="lastUpdated"
+                      checked={visibleColumns.lastUpdated}
+                      onChange={() => handleToggleColumn("lastUpdated")}
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <label htmlFor="lastUpdated" className="text-sm font-medium text-gray-700">
+                      Last updated
+                    </label>
+                  </div>
+                  <button
+                    className="mt-3 w-full bg-blue-500 text-white hover:bg-blue-600 px-3 py-1 rounded text-sm font-medium"
+                    onClick={() => setShowColumnsDropdown(false)}
+                  >
+                    Save changes
+                  </button>
+                </div>
               </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    {visibleColumns.listName && (
-                      <th className="px-4 py-3 text-left font-medium text-gray-700">List name</th>
-                    )}
-                    {visibleColumns.displayName && (
-                      <th className="px-4 py-3 text-left font-medium text-gray-700">Display name</th>
-                    )}
-                    {visibleColumns.subscribersCount && (
-                      <th className="px-4 py-3 text-left font-medium text-gray-700">Subscribers count</th>
-                    )}
-                    {visibleColumns.optIn && <th className="px-4 py-3 text-left font-medium text-gray-700">Opt in</th>}
-                    {visibleColumns.optOut && (
-                      <th className="px-4 py-3 text-left font-medium text-gray-700">Opt out</th>
-                    )}
-                    {visibleColumns.dateAdded && (
-                      <th className="px-4 py-3 text-left font-medium text-gray-700">Date added</th>
-                    )}
-                    {visibleColumns.lastUpdated && (
-                      <th className="px-4 py-3 text-left font-medium text-gray-700">Last updated</th>
-                    )}
-                    <th className="w-24 px-4 py-3 text-center font-medium text-gray-700">Options</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredData.map((item, index) => (
-                    <tr
-                      key={item.id}
-                      className={`border-b border-gray-100 hover:bg-gray-50 ${index % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
-                    >
-                      {visibleColumns.listName && (
-                        <td className="px-4 py-3 font-medium text-gray-900">{item.listName}</td>
-                      )}
-                      {visibleColumns.displayName && <td className="px-4 py-3 text-gray-600">{item.displayName}</td>}
-                      {visibleColumns.subscribersCount && (
-                        <td className="px-4 py-3 text-gray-600">{item.subscribersCount}</td>
-                      )}
-                      {visibleColumns.optIn && <td className="px-4 py-3 text-gray-600">{item.optIn}</td>}
-                      {visibleColumns.optOut && <td className="px-4 py-3 text-gray-600">{item.optOut}</td>}
-                      {visibleColumns.dateAdded && <td className="px-4 py-3 text-gray-600">{item.dateAdded}</td>}
-                      {visibleColumns.lastUpdated && <td className="px-4 py-3 text-gray-600">{item.lastUpdated}</td>}
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-blue-500 hover:bg-blue-50 hover:text-blue-700"
-                            onClick={() => handleEditItem(item)}
-                          >
-                            <Settings className="h-5 w-5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-red-500 hover:bg-red-50 hover:text-red-700"
-                            onClick={() => handleRemoveItem(item.id)}
-                          >
-                            <Trash2 className="h-5 w-5" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-gray-50">
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" className="h-8 w-8 p-0 bg-transparent">
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <span className="text-sm text-gray-600 px-2">1</span>
-                <Button variant="outline" size="sm" className="h-8 w-8 p-0 bg-transparent">
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
+            )}
           </div>
-        </>
-      )}
+
+          <Button
+            variant="default"
+            className="bg-blue-500 text-white hover:bg-blue-600"
+            onClick={() => setShowCreateForm(true)}
+          >
+            <PlusCircle className="mr-2 h-4 w-4" />
+            <span className="hidden sm:inline">Create new</span>
+            <span className="sm:hidden">New</span>
+          </Button>
+
+          <Button variant="default" className="bg-blue-500 text-white hover:bg-blue-600">
+            <Download className="mr-2 h-4 w-4" />
+            <span className="hidden sm:inline">Export</span>
+          </Button>
+
+          <Button variant="default" className="bg-blue-500 text-white hover:bg-blue-600" onClick={handleRefresh}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            <span className="hidden sm:inline">Refresh</span>
+          </Button>
+        </div>
+      </div>
+
+      <div className="text-sm text-muted-foreground">
+        Displaying {sortedLists.length > 0 ? "1" : "0"}-{sortedLists.length} of {sortedLists.length} result
+        {sortedLists.length !== 1 ? "s" : ""}
+      </div>
+
+      <div className="rounded-md border border-border overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-muted/50">
+              {visibleColumns.list && (
+                <th className="p-2 text-left border-b">
+                  <Input
+                    type="text"
+                    placeholder="Search list..."
+                    value={listSearch}
+                    onChange={(e) => setListSearch(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                </th>
+              )}
+              {visibleColumns.name && (
+                <th className="p-2 text-left border-b">
+                  <Input
+                    type="text"
+                    placeholder="Search name..."
+                    value={nameSearch}
+                    onChange={(e) => setNameSearch(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                </th>
+              )}
+              {visibleColumns.dateAdded && (
+                <th className="p-2 text-left border-b"></th>
+              )}
+              {visibleColumns.lastUpdated && (
+                <th className="p-2 text-left border-b"></th>
+              )}
+              <th className="p-2 text-left border-b"></th>
+            </tr>
+            <tr className="bg-muted/50">
+              {visibleColumns.list && (
+                <th className="p-3 text-left text-sm font-normal border-b">
+                  List
+                </th>
+              )}
+              {visibleColumns.name && (
+                <th className="p-3 text-left text-sm font-normal border-b">
+                  Name
+                </th>
+              )}
+              {visibleColumns.dateAdded && (
+                <th className="p-3 text-left text-sm font-normal border-b">
+                  Date added
+                </th>
+              )}
+              {visibleColumns.lastUpdated && (
+                <th className="p-3 text-left text-sm font-normal border-b">
+                  Last updated
+                </th>
+              )}
+              <th className="p-3 text-left text-sm font-normal border-b">Options</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedLists.length > 0 ? (
+              sortedLists.map((item) => (
+                <tr key={item.id} className="border-b hover:bg-muted/30">
+                  {visibleColumns.list && (
+                    <td className="p-3 text-blue-600 text-sm">
+                      {item.list}
+                    </td>
+                  )}
+                  {visibleColumns.name && (
+                    <td className="p-3 text-blue-600 text-sm">
+                      {item.name}
+                    </td>
+                  )}
+                  {visibleColumns.dateAdded && (
+                    <td className="p-3 text-sm">{item.dateAdded}</td>
+                  )}
+                  {visibleColumns.lastUpdated && (
+                    <td className="p-3 text-sm">{item.lastUpdated}</td>
+                  )}
+                  <td className="p-3">
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleView(item)}
+                        className="h-8 w-8 text-blue-600 hover:bg-blue-50"
+                        title="View"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEdit(item)}
+                        className="h-8 w-8 text-blue-600 hover:bg-blue-50"
+                        title="Update"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(item.id)}
+                        className="h-8 w-8 text-red-600 hover:bg-red-50"
+                        title="Delete"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={Object.values(visibleColumns).filter(Boolean).length + 1} className="p-8 text-center text-muted-foreground">
+                  No results found
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex items-center justify-end">
+        <div className="flex items-center gap-2">
+          <select className="h-8 rounded border px-2 text-sm">
+            <option>10</option>
+            <option>25</option>
+            <option>50</option>
+          </select>
+        </div>
+      </div>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the suppression list.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
 
-function CreateSuppressionForm({
+function CreateSuppressionListForm({
   editingItem,
   onCancel,
   onSubmit,
 }: {
-  editingItem?: SuppressionEntry | null
+  editingItem?: SuppressionList | null
   onCancel: () => void
-  onSubmit: (success: boolean, data?: { listName: string; displayName: string }) => void
+  onSubmit: (success: boolean, data?: Omit<SuppressionList, "id">) => void
 }) {
-  const [listName, setListName] = useState(editingItem?.listName || "")
-  const [displayName, setDisplayName] = useState(editingItem?.displayName || "")
+  const [name, setName] = useState(editingItem?.name || "")
 
-  const handleSubmit = () => {
-    if (!listName) {
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!name.trim()) {
       onSubmit(false)
       return
     }
-    onSubmit(true, { listName, displayName })
+
+    const currentDate = new Date().toLocaleString("en-US", {
+      month: "numeric",
+      day: "numeric",
+      year: "2-digit",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    })
+
+    const data = {
+      list: `web${Date.now().toString().slice(-8)}`,
+      name: name.trim(),
+      dateAdded: editingItem?.dateAdded || currentDate,
+      lastUpdated: currentDate,
+    }
+
+    onSubmit(true, data)
   }
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="flex items-center text-xl font-semibold text-gray-900">
-          <Ban className="mr-2 h-5 w-5" />
-          {editingItem ? "Edit suppression list" : "Create a new suppression list"}
-        </h2>
-        <Button variant="outline" onClick={onCancel}>
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="flex items-center text-xl font-semibold">
+          <Ban className="mr-2 h-5 w-5" /> {editingItem ? "Update" : "Create new"}
+        </h1>
+        <Button variant="default" className="bg-blue-500 text-white hover:bg-blue-600" onClick={onCancel}>
           Cancel
         </Button>
       </div>
 
-      <div className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-700">
-            List Name <span className="text-red-500">*</span>
+          <label className="text-sm font-medium">
+            Name <span className="text-red-500">*</span>
           </label>
           <Input
             type="text"
-            placeholder="Enter list name"
-            value={listName}
-            onChange={(e) => setListName(e.target.value)}
-            className="w-full border-gray-300"
-            required
+            placeholder="Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full"
           />
         </div>
 
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-700">Display Name</label>
-          <Input
-            type="text"
-            placeholder="Enter display name (optional)"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            className="w-full border-gray-300"
-          />
-        </div>
-
-        <div className="flex justify-end gap-3">
-          <Button type="button" variant="outline" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button type="button" className="bg-blue-500 text-white hover:bg-blue-600" onClick={handleSubmit}>
-            Save changes
+        <div className="flex justify-end">
+          <Button type="submit" className="bg-blue-500 text-white hover:bg-blue-600">
+            {editingItem ? "Update changes" : "Save changes"}
           </Button>
         </div>
-      </div>
+      </form>
     </div>
   )
 }
