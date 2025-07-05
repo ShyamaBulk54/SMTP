@@ -67,14 +67,15 @@ export default function SurveysContent() {
   ])
 
   const [formData, setFormData] = useState({
-    name: "",
-    displayName: "",
-    description: "",
-    finishRedirect: "",
-    status: "Draft" as const,
-    startAt: "",
-    endAt: "",
-  })
+  name: "",
+  displayName: "",
+  description: "",
+  finishRedirect: "",
+  status: "Draft" as "Draft" | "Active" | "Inactive", // Change this line
+  startAt: "",
+  endAt: "",
+})
+
 
   // Load surveys from localStorage on component mount
   useEffect(() => {

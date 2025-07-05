@@ -33,7 +33,10 @@ export default function CurrentPlanCard({
             <span className="text-xs font-medium text-orange-100">STORAGE</span>
             <span className="text-xs font-medium text-orange-100">{storagePercentage}%</span>
           </div>
-          <Progress value={storagePercentage} className="h-2 bg-orange-400" indicatorClassName="bg-white" />
+          <Progress 
+            value={storagePercentage} 
+            className="h-2 bg-orange-400 [&>div]:bg-white" 
+          />
         </div>
         <Button
           onClick={() => router.push("/upgrade")}

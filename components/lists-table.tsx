@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
@@ -15,8 +17,72 @@ import {
   X,
 } from "lucide-react"
 
+interface ButtonProps {
+  children: React.ReactNode
+  variant?: "default" | "outline" | "ghost" | "destructive" | "success"
+  size?: "default" | "sm" | "lg" | "icon"
+  className?: string
+  onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void
+  disabled?: boolean
+  [key: string]: any
+}
+
+interface InputWithTooltipProps {
+  label: string
+  tooltip: string
+  required?: boolean
+  className?: string
+  error?: string
+  [key: string]: any
+}
+
+interface TextareaWithTooltipProps {
+  label: string
+  tooltip: string
+  required?: boolean
+  className?: string
+  error?: string
+  [key: string]: any
+}
+
+interface SelectWithTooltipProps {
+  label: string
+  tooltip: string
+  required?: boolean
+  children: React.ReactNode
+  className?: string
+  error?: string
+  [key: string]: any
+}
+
+interface CheckboxProps {
+  id: string
+  checked: boolean
+  onCheckedChange?: (checked: boolean) => void
+  label?: string
+  [key: string]: any
+}
+
+interface ToastProps {
+  message: string
+  onClose: () => void
+}
+
+interface AvailableTagsModalProps {
+  isOpen: boolean
+  onClose: () => void
+}
+
 // Custom Button component
-const Button = ({ children, variant = "default", size = "default", className = "", onClick, disabled, ...props }) => {
+const Button = ({
+  children,
+  variant = "default",
+  size = "default",
+  className = "",
+  onClick,
+  disabled = false,
+  ...props
+}: ButtonProps) => {
   const baseClasses =
     "inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
 
@@ -48,7 +114,14 @@ const Button = ({ children, variant = "default", size = "default", className = "
 }
 
 // Custom Input component with tooltip
-const InputWithTooltip = ({ label, tooltip, required, className = "", error, ...props }) => {
+const InputWithTooltip = ({
+  label,
+  tooltip,
+  required = false,
+  className = "",
+  error,
+  ...props
+}: InputWithTooltipProps) => {
   const [showTooltip, setShowTooltip] = useState(false)
 
   return (
@@ -83,7 +156,14 @@ const InputWithTooltip = ({ label, tooltip, required, className = "", error, ...
 }
 
 // Custom Textarea with tooltip
-const TextareaWithTooltip = ({ label, tooltip, required, className = "", error, ...props }) => {
+const TextareaWithTooltip = ({
+  label,
+  tooltip,
+  required,
+  className = "",
+  error,
+  ...props
+}: TextareaWithTooltipProps) => {
   const [showTooltip, setShowTooltip] = useState(false)
 
   return (
@@ -118,7 +198,15 @@ const TextareaWithTooltip = ({ label, tooltip, required, className = "", error, 
 }
 
 // Custom Select with tooltip
-const SelectWithTooltip = ({ label, tooltip, required, children, className = "", error, ...props }) => {
+const SelectWithTooltip = ({
+  label,
+  tooltip,
+  required,
+  children,
+  className = "",
+  error = "",
+  ...props
+}: SelectWithTooltipProps) => {
   const [showTooltip, setShowTooltip] = useState(false)
 
   return (
@@ -175,7 +263,7 @@ const Textarea = ({ className = "", ...props }) => {
 }
 
 // Custom Checkbox component
-const Checkbox = ({ id, checked, onCheckedChange, label, ...props }) => {
+const Checkbox = ({ id, checked, onCheckedChange, label = "", ...props }: CheckboxProps) => {
   return (
     <div className="flex items-center space-x-2 border-b border-gray-100 py-2">
       <input
@@ -196,7 +284,7 @@ const Checkbox = ({ id, checked, onCheckedChange, label, ...props }) => {
 }
 
 // Success Toast Component
-const SuccessToast = ({ message, onClose }) => {
+const SuccessToast = ({ message, onClose }: ToastProps) => {
   return (
     <div className="fixed top-4 right-4 z-50 bg-green-500 text-white px-6 py-3 rounded-md shadow-lg flex items-center gap-2">
       <div className="w-2 h-2 bg-white rounded-full"></div>
@@ -209,7 +297,7 @@ const SuccessToast = ({ message, onClose }) => {
 }
 
 // Error Toast Component
-const ErrorToast = ({ message, onClose }) => {
+const ErrorToast = ({ message, onClose }: ToastProps) => {
   return (
     <div className="fixed top-4 right-4 z-50 bg-red-500 text-white px-6 py-3 rounded-md shadow-lg flex items-center gap-2">
       <div className="w-2 h-2 bg-white rounded-full"></div>
@@ -342,7 +430,11 @@ export default function EmailListManager() {
   const [editingListId, setEditingListId] = useState<string | null>(null)
   const [showAvailableTags, setShowAvailableTags] = useState(false)
   const [subscriberActionTab, setSubscriberActionTab] = useState("subscribe")
-  const [selectedLists, setSelectedLists] = useState({
+  const [selectedLists, setSelectedLists] = useState<{
+    selectAll: boolean
+    subscribe: Record<string, boolean>
+    unsubscribe: Record<string, boolean>
+  }>({
     selectAll: false,
     subscribe: {},
     unsubscribe: {},
@@ -362,24 +454,24 @@ export default function EmailListManager() {
   })
 
   // Load lists from localStorage on component mount
-const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
 
-// Modify the initial load effect:
-useEffect(() => {
-  const storedLists = loadListsFromStorage()
-  const sortedLists = storedLists.sort((a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime())
-  setLists(sortedLists)
-  setFilteredLists(sortedLists)
-  setIsInitialLoad(false) // Mark initial load as complete
-}, [])
+  // Modify the initial load effect:
+  useEffect(() => {
+    const storedLists = loadListsFromStorage()
+    const sortedLists = storedLists.sort((a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime())
+    setLists(sortedLists)
+    setFilteredLists(sortedLists)
+    setIsInitialLoad(false) // Mark initial load as complete
+  }, [])
 
-// Fix the save effect:
-useEffect(() => {
-  if (!isInitialLoad && typeof window !== "undefined") { // Only save after initial load
-    saveListsToStorage(lists)
-  }
-}, [lists, isInitialLoad])
-
+  // Fix the save effect:
+  useEffect(() => {
+    if (!isInitialLoad && typeof window !== "undefined") {
+      // Only save after initial load
+      saveListsToStorage(lists)
+    }
+  }, [lists, isInitialLoad])
 
   // Archive function
   const handleArchiveList = (id: string) => {
@@ -444,8 +536,9 @@ useEffect(() => {
 
   // Add click outside handler to close dropdowns
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (!event.target.closest(".columns-dropdown")) {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element
+      if (!target?.closest(".columns-dropdown")) {
         setShowColumnsDropdown(false)
       }
     }
@@ -458,11 +551,12 @@ useEffect(() => {
 
   // Add click outside handler to close action dropdowns
   useEffect(() => {
-    const handleClickOutside = (event) => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element | null
       if (
-        !event.target.closest(".columns-dropdown") &&
-        !event.target.closest("[id^='action-dropdown-']") &&
-        !event.target.closest("button")
+        !target?.closest(".columns-dropdown") &&
+        !target?.closest("[id^='action-dropdown-']") &&
+        !target?.closest("button")
       ) {
         setShowColumnsDropdown(false)
         // Close all action dropdowns
@@ -746,8 +840,8 @@ useEffect(() => {
     setShowColumnsDropdown(false)
   }
 
-  const handleSelectAllChange = (checked) => {
-    const allListsState = {}
+  const handleSelectAllChange = (checked: boolean) => {
+    const allListsState: Record<string, boolean> = {}
     lists.forEach((list) => {
       allListsState[list.id] = checked
     })
@@ -759,7 +853,7 @@ useEffect(() => {
     })
   }
 
-  const handleListSelection = (listId, checked) => {
+  const handleListSelection = (listId: string, checked: boolean) => {
     if (subscriberActionTab === "subscribe") {
       setSelectedLists({
         ...selectedLists,
@@ -781,7 +875,7 @@ useEffect(() => {
 
   const visibleColumns = columns.filter((col) => col.visible)
 
-  const AvailableTagsModal = ({ isOpen, onClose }) => {
+  const AvailableTagsModal = ({ isOpen, onClose }: AvailableTagsModalProps) => {
     if (!isOpen) return null
 
     const tags = [
@@ -873,7 +967,7 @@ useEffect(() => {
                           : "border-transparent text-gray-500 hover:text-gray-700"
                       }`}
                     >
-                      {tabNames[tab]}
+                      {tabNames[tab as keyof typeof tabNames]}
                     </button>
                   ))}
                 </nav>
@@ -891,7 +985,9 @@ useEffect(() => {
                         tooltip="Your mail list verbose name. It will be shown in your customer area sections and used for internal identification."
                         required
                         value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                          setFormData({ ...formData, name: e.target.value })
+                        }
                         placeholder="Newsletter Subscribers"
                         error={formErrors.name}
                       />
@@ -900,7 +996,9 @@ useEffect(() => {
                         tooltip="The public name that subscribers will see when they receive emails from this list."
                         required
                         value={formData.displayName}
-                        onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                          setFormData({ ...formData, displayName: e.target.value })
+                        }
                         placeholder="Weekly Newsletter"
                         error={formErrors.displayName}
                       />
@@ -911,7 +1009,9 @@ useEffect(() => {
                       tooltip="A brief description of this list that helps subscribers understand what they're signing up for. Keep it clear and concise."
                       required
                       value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                        setFormData({ ...formData, description: e.target.value })
+                      }
                       placeholder="Weekly updates about our latest products, tips, and industry news."
                       error={formErrors.description}
                     />
@@ -922,7 +1022,9 @@ useEffect(() => {
                         tooltip="Double opt-in requires subscribers to confirm their email address, ensuring higher quality lists. Single opt-in allows immediate subscription."
                         required
                         value={formData.optIn}
-                        onChange={(e) => setFormData({ ...formData, optIn: e.target.value })}
+                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                          setFormData({ ...formData, optIn: e.target.value })
+                        }
                       >
                         <option value="double">Double option-in</option>
                         <option value="single">Single option-in</option>
@@ -933,7 +1035,9 @@ useEffect(() => {
                         tooltip="Single opt-out allows immediate unsubscription. Double opt-out requires confirmation before removing subscribers."
                         required
                         value={formData.optOut}
-                        onChange={(e) => setFormData({ ...formData, optOut: e.target.value })}
+                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                          setFormData({ ...formData, optOut: e.target.value })
+                        }
                       >
                         <option value="single">Single option-out</option>
                         <option value="double">Double option-out</option>
@@ -952,7 +1056,9 @@ useEffect(() => {
                       tooltip="The sender name that appears in subscribers' inboxes. Use your brand name or personal name for better recognition."
                       required
                       value={formData.fromName}
-                      onChange={(e) => setFormData({ ...formData, fromName: e.target.value })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setFormData({ ...formData, fromName: e.target.value })
+                      }
                       placeholder="John Smith"
                       error={formErrors.fromName}
                     />
@@ -962,7 +1068,9 @@ useEffect(() => {
                       tooltip="The email address that emails will be sent from. Make sure this is a verified domain email for better deliverability."
                       required
                       value={formData.fromEmail}
-                      onChange={(e) => setFormData({ ...formData, fromEmail: e.target.value })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setFormData({ ...formData, fromEmail: e.target.value })
+                      }
                       placeholder="newsletter@yourcompany.com"
                       error={formErrors.fromEmail}
                     />
@@ -972,7 +1080,9 @@ useEffect(() => {
                       tooltip="Where replies to your emails will be sent. This can be different from the 'From' email if you want replies to go to a specific address."
                       required
                       value={formData.replyTo}
-                      onChange={(e) => setFormData({ ...formData, replyTo: e.target.value })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setFormData({ ...formData, replyTo: e.target.value })
+                      }
                       placeholder="support@yourcompany.com"
                       error={formErrors.replyTo}
                     />
@@ -981,7 +1091,9 @@ useEffect(() => {
                       label="Subject"
                       tooltip="Default subject line for emails sent to this list. You can override this for individual campaigns."
                       value={formData.subject}
-                      onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setFormData({ ...formData, subject: e.target.value })
+                      }
                       placeholder="Weekly Newsletter - [DATE]"
                     />
                   </div>
@@ -1060,7 +1172,7 @@ useEffect(() => {
                           <Checkbox
                             key={list.id}
                             id={`subscribe-${list.id}`}
-                            checked={selectedLists.subscribe[list.id] || false}
+                            checked={(selectedLists.subscribe[list.id] as boolean) || false}
                             onCheckedChange={(checked) => handleListSelection(list.id, checked)}
                             label={list.name}
                           />
@@ -1090,7 +1202,7 @@ useEffect(() => {
                           <Checkbox
                             key={list.id}
                             id={`unsubscribe-${list.id}`}
-                            checked={selectedLists.unsubscribe[list.id] || false}
+                            checked={(selectedLists.unsubscribe[list.id] as boolean) || false}
                             onCheckedChange={(checked) => handleListSelection(list.id, checked)}
                             label={list.name}
                           />
@@ -1113,7 +1225,9 @@ useEffect(() => {
                       tooltip="Your company or organization name that will appear in email footers and legal compliance sections."
                       required
                       value={formData.companyName}
-                      onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setFormData({ ...formData, companyName: e.target.value })
+                      }
                       placeholder="Your Company Name"
                       error={formErrors.companyName}
                     />
@@ -1122,7 +1236,9 @@ useEffect(() => {
                       label="Type/Industry"
                       tooltip="Select your business type or industry for better categorization and compliance."
                       value={formData.companyIndustry}
-                      onChange={(e) => setFormData({ ...formData, companyIndustry: e.target.value })}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                        setFormData({ ...formData, companyIndustry: e.target.value })
+                      }
                     >
                       <option value="">Please select</option>
                       <option value="technology">Technology & Software</option>
@@ -1147,7 +1263,9 @@ useEffect(() => {
                       tooltip="Your company's primary country of operation for legal compliance and regulations."
                       required
                       value={formData.companyCountry}
-                      onChange={(e) => setFormData({ ...formData, companyCountry: e.target.value })}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                        setFormData({ ...formData, companyCountry: e.target.value })
+                      }
                       error={formErrors.companyCountry}
                     >
                       <option value="">Please select</option>
@@ -1180,7 +1298,9 @@ useEffect(() => {
                       label="Zone"
                       tooltip="Geographic zone or region within your country."
                       value={formData.companyZone}
-                      onChange={(e) => setFormData({ ...formData, companyZone: e.target.value })}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                        setFormData({ ...formData, companyZone: e.target.value })
+                      }
                     >
                       <option value="">Please select</option>
                       <option value="north-america">North America</option>
@@ -1212,7 +1332,9 @@ useEffect(() => {
                       tooltip="Primary business address line (street address, building number)."
                       required
                       value={formData.companyAddress1}
-                      onChange={(e) => setFormData({ ...formData, companyAddress1: e.target.value })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setFormData({ ...formData, companyAddress1: e.target.value })
+                      }
                       placeholder="123 Business Street"
                       error={formErrors.companyAddress1}
                     />
@@ -1221,7 +1343,9 @@ useEffect(() => {
                       label="Address 2"
                       tooltip="Additional address information (suite, apartment, floor number)."
                       value={formData.companyAddress2}
-                      onChange={(e) => setFormData({ ...formData, companyAddress2: e.target.value })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setFormData({ ...formData, companyAddress2: e.target.value })
+                      }
                       placeholder="Suite 100"
                     />
                   </div>
@@ -1232,7 +1356,9 @@ useEffect(() => {
                       tooltip="City where your business is located."
                       required
                       value={formData.companyCity}
-                      onChange={(e) => setFormData({ ...formData, companyCity: e.target.value })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setFormData({ ...formData, companyCity: e.target.value })
+                      }
                       placeholder="New York"
                       error={formErrors.companyCity}
                     />
@@ -1242,7 +1368,9 @@ useEffect(() => {
                       tooltip="Postal or ZIP code for your business address."
                       required
                       value={formData.companyZip}
-                      onChange={(e) => setFormData({ ...formData, companyZip: e.target.value })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setFormData({ ...formData, companyZip: e.target.value })
+                      }
                       placeholder="10001"
                       error={formErrors.companyZip}
                     />
@@ -1251,7 +1379,9 @@ useEffect(() => {
                       label="Phone"
                       tooltip="Business phone number for customer contact."
                       value={formData.companyPhone}
-                      onChange={(e) => setFormData({ ...formData, companyPhone: e.target.value })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setFormData({ ...formData, companyPhone: e.target.value })
+                      }
                       placeholder="+1 (555) 123-4567"
                     />
                   </div>
@@ -1260,7 +1390,9 @@ useEffect(() => {
                     label="Website"
                     tooltip="Your company website URL."
                     value={formData.companyWebsite}
-                    onChange={(e) => setFormData({ ...formData, companyWebsite: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setFormData({ ...formData, companyWebsite: e.target.value })
+                    }
                     placeholder="https://yourcompany.com"
                   />
 
@@ -1497,7 +1629,7 @@ useEffect(() => {
                     {column.id === "optIn" || column.id === "optOut" ? (
                       <select
                         className="w-full h-8 px-2 text-xs border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        value={searchFilters[column.id]}
+                        value={searchFilters[column.id as keyof typeof searchFilters]}
                         onChange={(e) => setSearchFilters({ ...searchFilters, [column.id]: e.target.value })}
                       >
                         <option value="">All</option>
@@ -1510,7 +1642,7 @@ useEffect(() => {
                         type="text"
                         className="w-full h-8 px-2 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                         placeholder={`Search ${column.label.toLowerCase()}...`}
-                        value={searchFilters[column.id]}
+                        value={searchFilters[column.id as keyof typeof searchFilters]}
                         onChange={(e) => setSearchFilters({ ...searchFilters, [column.id]: e.target.value })}
                       />
                     )}
