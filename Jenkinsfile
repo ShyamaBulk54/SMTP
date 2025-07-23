@@ -7,7 +7,7 @@ pipeline {
         REMOTE_HOST = '35.154.86.157'
         REMOTE_PATH = '/var/www/jenkinstest'
         SSH_KEY = '/var/lib/jenkins/.ssh/id_rsa' // Jenkins private key path
-        BAK_PATH = '${REMOTE_PATH}-bak-${date +%Y%m%d}' // DocRoot backup of production server
+        // BAK_PATH = '${REMOTE_PATH}-bak-${date +%Y%m%d}' // DocRoot backup of production server
     }
 
     options {
