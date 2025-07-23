@@ -1,0 +1,61 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 Int           @id @default(autoincrement())
+  name               String
+  email              String        @unique
+  phone              String?
+  address            String?
+  authenticatedEmail String
+  password           String?
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+  
+  subscribers        Subscriber[]
+  dashboardData      DashboardData[]
+  
+  @@map("users")
+}
+
+model Subscriber {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String
+  phone     String?
+  address   String?
+  status    String   @default("active")
+  userId    Int      @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dashboardData  DashboardData[]
+  
+  @@map("subscribers")
+}
+
+model DashboardData {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  subscriberId Int?     @map("subscriber_id")
+  metricType   String   @map("metric_type")
+  metricValue  Int      @default(1) @map("metric_value")
+  dateRecorded DateTime @default(now()) @map("date_recorded")
+  createdAt    DateTime @default(now()) @map("created_at")
+  
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscriber Subscriber? @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+  
+  @@map("dashboard_data")
+}
