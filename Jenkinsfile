@@ -60,7 +60,8 @@ pipeline {
 
                     // Assign permission
                     sh """
-                    chown -R root:root ${REMOTE_PATH}
+                    ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} \\
+                    'chown -R root:root ${REMOTE_PATH}/'
                     """
                 }
             }
