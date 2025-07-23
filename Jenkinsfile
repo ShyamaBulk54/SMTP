@@ -52,7 +52,7 @@ pipeline {
                     // mkdir -p "$bak_path" && cp -r ${REMOTE_PATH}/* "$bak_path"/ || true'
                     // """
 
-                    Deploy new build via rsync
+                    // Deploy new build via rsync
                     sh """
                     rsync -avz --delete -e "ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no" \\
                     build/ ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/
