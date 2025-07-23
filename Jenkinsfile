@@ -45,14 +45,14 @@ pipeline {
                 script {
                     sh "chmod 600 ${SSH_KEY}"
 
-                    // Backup old deployment on the remote server
+                    // Backup old deployment
                     sh """
                     ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} \\
-                    'bak_path="${REMOTE_PATH}-bak-$(date +%Y%m%d%H%M%S)"; \\
+                    'bak_path="${REMOTE_PATH}-bak-`date +%Y%m%d%H%M%S`"; \\
                     mkdir -p "$bak_path" && cp -r ${REMOTE_PATH}/* "$bak_path"/ || true'
                     """
 
-                    // Rsync new build to Nginx directory
+                    // Deploy new build via rsync
                     sh """
                     rsync -avz --delete -e "ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no" \\
                     build/ ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/
