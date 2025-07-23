@@ -55,7 +55,7 @@ pipeline {
                     // Deploy new build via rsync
                     sh """
                     rsync -avz --delete -e "ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no" \\
-                    build/ ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/
+                    node_modules/next/dist/build/ ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/
                     """
 
                 }
