@@ -7,6 +7,7 @@ pipeline {
         REMOTE_HOST = '35.154.86.157'
         REMOTE_PATH = '/var/www/jenkinstest'
         SSH_KEY = '/var/lib/jenkins/.ssh/id_rsa' // Jenkins private key path
+        BAK_PATH = '${REMOTE_PATH}-bak-${date +%Y%m%d}' // DocRoot backup of production server
     }
 
     options {
@@ -46,11 +47,10 @@ pipeline {
                     sh "chmod 600 ${SSH_KEY}"
 
                     // Backup old deployment
-                    // sh """
-                    // ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} \\
-                    // 'bak_path="${REMOTE_PATH}-bak-`date +%Y%m%d`"; \\
-                    // mkdir -p "$bak_path" && cp -r ${REMOTE_PATH}/* "$bak_path"/ || true'
-                    // """
+                    sh """
+                    ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} \\
+                    'mkdir -p ${BAK_PATH} && cp -r ${REMOTE_PATH}/* ${BAK_PATH}/ || true'
+                    """
 
                     // Deploy new build via rsync
                     sh """
