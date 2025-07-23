@@ -18,8 +18,7 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                // checkout scm
-                git branch: 'main', url: git@github.com:ShyamaBulk54/SMTP.git
+                checkout scm
             }
         }
 
@@ -53,18 +52,12 @@ pipeline {
                     // mkdir -p "$bak_path" && cp -r ${REMOTE_PATH}/* "$bak_path"/ || true'
                     // """
 
-                    // Deploy new build via rsync
-                    // sh """
-                    // rsync -avz --delete -e "ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no" \\
-                    // out/ ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/
-                    // """
-
-                    // Rsync the necessary files to production server
+                    Deploy new build via rsync
                     sh """
                     rsync -avz --delete -e "ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no" \\
-                    .next/ public/ package.json package-lock.json \\
-                    ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/
+                    build/ ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/
                     """
+
                 }
             }
         }
