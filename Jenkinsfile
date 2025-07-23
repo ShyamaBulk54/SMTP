@@ -48,7 +48,7 @@ pipeline {
                     // Optional: backup old build (1-step rollback safety)
                     sh """
                     ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} \\
-                    'bak_path="${REMOTE_PATH}-bak-$(date +%Y%m%d%H%M%S)"; \\
+                    'bak_path="${REMOTE_PATH}-bak-`date +%Y%m%d%H%M%S`"; \\
                     mkdir -p "$bak_path" && cp -r ${REMOTE_PATH}/* "$bak_path"/ || true'
                     """
 
