@@ -57,7 +57,6 @@ pipeline {
                     rsync -avz --delete -e "ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no" \\
                     . ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/
                     """
-
                 }
             }
         }
