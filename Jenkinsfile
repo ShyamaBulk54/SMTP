@@ -46,11 +46,11 @@ pipeline {
                     sh "chmod 600 ${SSH_KEY}"
 
                     // Backup old deployment
-                    sh """
-                    ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} \\
-                    'bak_path="${REMOTE_PATH}-bak-`date +%Y%m%d`"; \\
-                    mkdir -p "$bak_path" && cp -r ${REMOTE_PATH}/* "$bak_path"/ || true'
-                    """
+                    // sh """
+                    // ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} \\
+                    // 'bak_path="${REMOTE_PATH}-bak-`date +%Y%m%d`"; \\
+                    // mkdir -p "$bak_path" && cp -r ${REMOTE_PATH}/* "$bak_path"/ || true'
+                    // """
 
                     // Deploy new build via rsync
                     sh """
