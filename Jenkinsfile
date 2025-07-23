@@ -48,7 +48,7 @@ pipeline {
                     // Backup old deployment
                     sh """
                     ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} \\
-                    'bak_path="${REMOTE_PATH}-bak-`date +%Y%m%d%H%M%S`"; \\
+                    'bak_path="${REMOTE_PATH}-bak-`date +%Y%m%d`"; \\
                     mkdir -p "$bak_path" && cp -r ${REMOTE_PATH}/* "$bak_path"/ || true'
                     """
 
