@@ -1,0 +1,844 @@
+Write me a python script using boto3 module when required to perform the following tasks:
+Note: Read very carefully the following points and its sub-point and write the python script keeping each and every point in mind.
+
+Step 1. Will create a pem key pair:
+   a) Prompting to user for name.
+   b) Prompting to user for tag.
+   
+Step 2. Will create an elastic IP.
+   a) Promting user for Tag.
+
+Step 3. Will create a new security group:
+   a) Prompting user for security group name.
+   b) Prompting user for security group description.
+   c) Prompting user for tag.
+   d) Prompting user for ports enabling in Inbound rules.
+   
+Step 4. Will launch Ubuntu Instance:
+   a) Prompting to user with available AMI list on that region.
+   b) Prompting to user for Instance type.
+   c) Enabling against accidental deletion.
+   d) Prompting for SSD size.
+   e) Prompting user for Tag.
+   f) Assing elastic IP created in step 2.
+   g) Assign security group created in step 3.
+
+Step 5. Will create public certificate in certificate manager for example: "example.com" and "*.example.com".:
+   a) Prompting user for domain name.
+   b) Prompting user for Tag.
+   c) Show the generated records in terminal.
+   
+Step 6. Will create an ALB (Application Load Balancer.):
+   a) Prompting user for Load balancer name.
+   b) It should be IPv4 internet facing.
+   c) Select all the subnets available in that region.
+   d) Create a security group for ALB (Application Load Balancer.):
+      * Prompting user for security group name.
+      * Prompting user for security group description.
+      * Prompting user for tag.
+      * Prompting user for ports enabling in Inbound rules.
+      * Assign this security group to Load balancer creating in Step 6.
+   e) Create a target group:
+      * Prompting user for target group name.
+      * Advance Health Check Settings will be as follows:
+        * Health check path: / (default - do not change)
+        * Traffic port
+        * healthy threshold: 8
+        * Unhealthy threshold: 6
+        * Timeout: 25
+        * Interval: 30
+        * Success code: 200,302
+        * Prompting user for tag.
+        * Show the list of the available instances, so that the user can include that in target group.
+        * Assign the target group to ALB (Application Load Balancer) after creating it.
+   f) Select the following security policy for ALB (Application Load Balancer):
+      * ELBSecurityPolicy-TLS-1-2-Ext-2018-06 
+   g) Show the list of the default ACM SSL certificate to user if available, to select for ALB (Application Load Balancer.)
+   h) In ALB, deletion protection should be enabled from edit attributes settings.
+   i) Add listener > redirected to https - 443, if ACM SSL certificate is enabled in point "g" of Step 6.
+   j) Show the ALB url in the terminal.
+
+Step 7. Add Inbound rules in security group created Step 3.
+   a) Rule should be all tcp > attach ALB security group created in point "d" of Step 6
+   
+### Points for rectification ###
+
+
+import boto3
+import time
+
+ec2_client = boto3.client('ec2')
+acm_client = boto3.client('acm')
+elbv2_client = boto3.client('elbv2')
+
+
+def create_key_pair():
+    key_name = input("Enter key pair name: ")
+    tag = input("Enter key pair tag: ")
+    response = ec2_client.create_key_pair(
+        KeyName=key_name,
+        TagSpecifications=[
+            {
+                'ResourceType': 'key-pair',
+                'Tags': [{'Key': 'Name', 'Value': tag}]
+            }
+        ]
+    )
+    key_material = response['KeyMaterial']
+    with open(f'{key_name}.pem', 'w') as file:
+        file.write(key_material)
+    print(f"Key pair '{key_name}' created successfully and saved as '{key_name}.pem'")
+    return key_name
+
+
+def create_elastic_ip():
+    tag = input("Enter elastic IP tag: ")
+    ec2_client.allocate_address(
+        TagSpecifications=[{'ResourceType': 'elastic-ip', 'Tags': [{'Key': 'Name', 'Value': tag}]}])
+    print("Elastic IP created successfully.")
+
+
+def create_security_group():
+    group_name = input("Enter security group name: ")
+    description = input("Enter security group description: ")
+    tag = input("Enter security group tag: ")
+
+    # Proceed to create a new security group
+    ports = input("Enter ports to enable in inbound rules (comma-separated): ").split(',')
+    ip_ranges = input("Enter specific IPs for the rules (comma-separated, e.g. 0.0.0.0/0): ").split(',')
+
+    response = ec2_client.create_security_group(
+        GroupName=group_name,
+        Description=description,
+        TagSpecifications=[
+            {'ResourceType': 'security-group', 'Tags': [{'Key': 'Name', 'Value': tag}]}
+        ]
+    )
+    group_id = response['GroupId']
+
+    add_ipv6 = input("Do you want to add this rule for IPv6? (yes/no): ").lower()
+
+    for port in ports:
+        for ip_range in ip_ranges:
+            ec2_client.authorize_security_group_ingress(
+                GroupId=group_id,
+                IpProtocol='tcp',
+                FromPort=int(port),
+                ToPort=int(port),
+                CidrIp=ip_range
+            )
+
+        if add_ipv6 == "yes":
+            ec2_client.authorize_security_group_ingress(
+                GroupId=group_id,
+                IpPermissions=[
+                    {
+                        'IpProtocol': 'tcp',
+                        'FromPort': int(port),
+                        'ToPort': int(port),
+                        'Ipv6Ranges': [
+                            {'CidrIpv6': '::/0'}
+                        ]
+                    }
+                ]
+            )
+
+    print("Security group created successfully.")
+
+    # Check if the user wants to add an existing security group
+    add_existing_sg = input("Add existing security group with all TCP ports (0-65535)? (yes/no): ").lower() == 'yes'
+
+    if add_existing_sg:
+        # List existing security groups
+        security_groups = ec2_client.describe_security_groups()['SecurityGroups']
+        print("Available security groups:")
+        for i, sg in enumerate(security_groups):
+            print(f"{i + 1}: {sg['GroupName']} ({sg['GroupId']})")
+
+        selected_sg_index = int(input("Enter the number of the security group to add: ")) - 1
+        existing_sg_id = security_groups[selected_sg_index]['GroupId']
+
+        # Add all TCP ports (0-65535) from the existing security group to the new security group
+        ec2_client.authorize_security_group_ingress(
+            GroupId=group_id,
+            IpPermissions=[
+                {
+                    'IpProtocol': 'tcp',
+                    'FromPort': 0,
+                    'ToPort': 65535,
+                    'UserIdGroupPairs': [{'GroupId': existing_sg_id}]
+                }
+            ]
+        )
+        print(
+            f"All TCP ports (0-65535) from security group {existing_sg_id} added to the new security group {group_id}.")
+
+
+def wait_until_instance_running(instance_id, ec2client):
+    while True:
+        response = ec2client.describe_instances(InstanceIds=[instance_id])
+        instance_state = response['Reservations'][0]['Instances'][0]['State']['Name']
+        if instance_state == 'running':
+            break
+        time.sleep(5)  # Wait for 5 seconds before checking again
+
+
+def launch_instance():
+    # Show available AMIs
+    ami_list = ec2_client.describe_images(Owners=['self'])['Images']
+    print("Available AMIs:")
+    for ami in ami_list:
+        print(f"AMI ID: {ami['ImageId']}, Name: {ami['Name']}")
+
+    # Get user input for AMI selection
+    ami_id = input("Enter the ID of the AMI you want to use: ")
+
+    # Show available key pairs
+    key_pairs = ec2_client.describe_key_pairs()['KeyPairs']
+    print("Available Key Pairs:")
+    for key_pair in key_pairs:
+        print(f"Key Pair Name: {key_pair['KeyName']}")
+
+    # Get user input for key pair selection
+    key_name = input("Enter key pair name: ")
+
+    # Show available Elastic IPs
+    eip_list = ec2_client.describe_addresses()['Addresses']
+    print("Available Elastic IPs:")
+    for eip in eip_list:
+        print(f"Elastic IP: {eip['PublicIp']}, Allocation ID: {eip['AllocationId']}")
+
+    # Get user input for Elastic IP selection
+    eip_allocation_id = input("Enter the Allocation ID of the Elastic IP you want to use (leave empty if none): ")
+
+    # Show available Security Groups
+    security_groups = ec2_client.describe_security_groups()['SecurityGroups']
+    print("Available Security Groups:")
+    for sg in security_groups:
+        print(f"Security Group Name: {sg['GroupName']}, Group ID: {sg['GroupId']}")
+
+    # Get user input for Security Group selection
+    security_group_id = input("Enter the ID of the Security Group you want to use: ")
+
+    # Get instance type, SSD size, and tag inputs as before
+    instance_type = input("Enter instance type: ")
+    ssd_size = int(input("Enter SSD size (in GiB): "))
+    tag = input("Enter instance tag: ")
+    user_data_path = input("Path to the bash script file for user data (leave empty if none): ")
+
+    # Initialize user_data
+    user_data = None
+
+    if user_data_path:
+        try:
+            with open(user_data_path, 'r') as file:
+                user_data = file.read()
+        except FileNotFoundError:
+            print(f"Error: File '{user_data_path}' not found.")
+            return
+
+    # Run instance with all inputs collected
+    response = ec2_client.run_instances(
+        ImageId=ami_id,
+        InstanceType=instance_type,
+        BlockDeviceMappings=[
+            {
+                'DeviceName': '/dev/sda1',
+                'Ebs': {
+                    'VolumeSize': ssd_size,
+                    'VolumeType': 'gp2'
+                }
+            },
+        ],
+        KeyName=key_name,
+        MaxCount=1,
+        MinCount=1,
+        TagSpecifications=[
+            {
+                'ResourceType': 'instance',
+                'Tags': [
+                    {
+                        'Key': 'Name',
+                        'Value': tag
+                    },
+                ]
+            },
+        ],
+        SecurityGroupIds=[security_group_id],
+        UserData=user_data.encode() if user_data is not None else b''  # Convert user data to bytes if provided
+    )
+
+    instance_id = response['Instances'][0]['InstanceId']
+    print(f"Instance {instance_id} launched successfully.")
+    print("Waiting for Instance to be in running state...")
+
+    # Enable deletion protection for the instance
+    ec2_client.modify_instance_attribute(
+        InstanceId=instance_id,
+        DisableApiTermination={
+            'Value': True
+        }
+    )
+
+    # Wait until the instance is running
+    wait_until_instance_running(instance_id, ec2_client)
+
+    # If Elastic IP is selected, associate it with the launched instance
+    if eip_allocation_id:
+        ec2_client.associate_address(AllocationId=eip_allocation_id, InstanceId=instance_id)
+
+    print(f"Elastic IP associated with instance {instance_id}.")
+
+
+def create_certificate():
+    domain_name = input("Enter domain name (e.g., example.com): ")
+    tag = input("Enter certificate tag: ")
+
+    # List of domain names to include in the certificate request
+    domain_names = [domain_name, f"*.{domain_name}"]
+
+    response = acm_client.request_certificate(
+        DomainName=domain_name,
+        SubjectAlternativeNames=domain_names,
+        ValidationMethod='DNS',
+        Tags=[
+            {
+                'Key': 'Name',
+                'Value': tag
+            },
+        ]
+    )
+
+    certificate_arn = response['CertificateArn']
+    print("Certificate requested successfully.")
+    print(f"Certificate ARN: {certificate_arn}")
+
+    # Poll the status of the certificate
+    while True:
+        response = acm_client.describe_certificate(CertificateArn=certificate_arn)
+        status = response['Certificate']['Status']
+
+        if status == 'ISSUED':
+            print("Certificate validated successfully.")
+            break
+        elif status in ['PENDING_VALIDATION', 'VALIDATION_TIMED_OUT']:
+            print(f"Current status: {status}. Waiting for validation to complete...")
+            break
+            # time.sleep(30)  # Wait for 30 seconds before checking again
+        else:
+            print(f"Unexpected status: {status}. Exiting.")
+            break
+
+
+def list_certificates():
+    response = acm_client.list_certificates()
+    certificates = response['CertificateSummaryList']
+
+    if not certificates:
+        print("No certificates found.")
+        return None
+
+    print("Available Certificates:")
+    for i, cert in enumerate(certificates):
+        print(f"{i + 1}. ARN: {cert['CertificateArn']}, Domain: {cert['DomainName']}")
+
+    choice = int(input("Select the number of the certificate to check its status: ")) - 1
+
+    if 0 <= choice < len(certificates):
+        certificate_arn = certificates[choice]['CertificateArn']
+        check_certificate_status(certificate_arn)
+    else:
+        print("Invalid selection.")
+        return None
+
+
+def check_certificate_status(certificate_arn):
+    while True:
+        response = acm_client.describe_certificate(CertificateArn=certificate_arn)
+        status = response['Certificate']['Status']
+
+        if status == 'ISSUED':
+            print("Certificate validated successfully.")
+            break
+        elif status in ['PENDING_VALIDATION', 'VALIDATION_TIMED_OUT']:
+            print(f"Current status: {status}. Waiting for validation to complete...")
+            break
+            # time.sleep(30)  # Wait for 30 seconds before checking again
+        else:
+            print(f"Unexpected status: {status}. Exiting.")
+            break
+
+
+def list_ec2_instances():
+    instances = ec2_client.describe_instances()
+    ec2_list = []
+
+    for reservation in instances['Reservations']:
+        for instance in reservation['Instances']:
+            instance_id = instance['InstanceId']
+            instance_name = ''
+            for tag in instance.get('Tags', []):
+                if tag['Key'] == 'Name':
+                    instance_name = tag['Value']
+            ec2_list.append((instance_name, instance_id))
+
+    return ec2_list
+
+
+def get_vpc_ids():
+    # Retrieve information about VPCs
+    response = ec2_client.describe_vpcs()
+
+    # Extract VPC IDs and return as a dictionary with index
+    vpc_ids = {index + 1: vpc['VpcId'] for index, vpc in enumerate(response['Vpcs'])}
+
+    return vpc_ids
+
+
+def choose_vpc(vpc_ids):
+    print("Available VPCs:")
+    for index, vpc_id in vpc_ids.items():
+        print(f"{index}. {vpc_id}")
+
+    while True:
+        choice = input("Choose a VPC by entering its index: ")
+        try:
+            choice = int(choice)
+            if choice in vpc_ids.keys():
+                return vpc_ids[choice]
+            else:
+                print("Invalid choice. Please enter a valid index.")
+        except ValueError:
+            print("Invalid input. Please enter a number.")
+
+
+def list_security_groups(vpc_id):
+    response = ec2_client.describe_security_groups(
+        Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}]
+    )
+    security_groups = [(sg['GroupName'], sg['GroupId']) for sg in response['SecurityGroups']]
+    return security_groups
+
+
+def list_acm_certificates():
+    response = acm_client.list_certificates(CertificateStatuses=['ISSUED'])
+    certificates = response['CertificateSummaryList']
+    return [(cert['DomainName'], cert['CertificateArn']) for cert in certificates]
+
+
+def create_alb():
+    alb_name = input("Enter ALB name: ")
+
+    # Retrieve subnets and VPC ID
+    subnets_info = ec2_client.describe_subnets()['Subnets']
+    subnets = [subnet['SubnetId'] for subnet in subnets_info]
+    vpc_ids = get_vpc_ids()
+    vpc_id = choose_vpc(vpc_ids)
+
+    print("Available subnets:")
+    for subnet in subnets:
+        print(subnet)
+
+    # Security group handling
+    create_new_sg = input("Do you want to create a new security group? (yes/no): ").lower() == 'yes'
+
+    if create_new_sg:
+        security_group_name = input("Enter ALB security group name: ")
+        security_group_description = input("Enter ALB security group description: ")
+        security_group_tag = input("Enter ALB security group tag: ")
+        ports = input("Enter ports to enable in ALB security group inbound rules (comma-separated): ").split(',')
+        add_ipv6 = input("Do you want to add this rule for IPv6? (yes/no): ").lower()
+
+        # Create security group
+        response = ec2_client.create_security_group(
+            GroupName=security_group_name,
+            Description=security_group_description,
+            VpcId=vpc_id,
+            TagSpecifications=[
+                {
+                    'ResourceType': 'security-group',
+                    'Tags': [
+                        {
+                            'Key': 'Name',
+                            'Value': security_group_tag
+                        },
+                    ]
+                },
+            ]
+        )
+        security_group_id = response['GroupId']
+
+        # Authorize security group ingress
+        for port in ports:
+            ec2_client.authorize_security_group_ingress(
+                GroupId=security_group_id,
+                IpProtocol='tcp',
+                FromPort=int(port),
+                ToPort=int(port),
+                CidrIp='0.0.0.0/0'
+            )
+
+            if add_ipv6 == "yes":
+                ec2_client.authorize_security_group_ingress(
+                    GroupId=security_group_id,
+                    IpPermissions=[
+                        {
+                            'IpProtocol': 'tcp',
+                            'FromPort': int(port),
+                            'ToPort': int(port),
+                            'Ipv6Ranges': [
+                                {'CidrIpv6': '::/0'}
+                            ]
+                        }
+                    ]
+                )
+        print("ALB security group created successfully.")
+    else:
+        security_groups = list_security_groups(vpc_id)
+        print("Available security groups:")
+        for i, (sg_name, sg_id) in enumerate(security_groups):
+            print(f"{i + 1}: {sg_name} ({sg_id})")
+        selected_sg_index = int(input("Enter the number of the security group to use: ")) - 1
+        security_group_id = security_groups[selected_sg_index][1]
+
+    # List EC2 instances
+    ec2_instances = list_ec2_instances()
+    print("Available EC2 instances:")
+    for i, (name, instance_id) in enumerate(ec2_instances):
+        print(f"{i+1}: Name: {name}, Instance ID: {instance_id}")
+
+    # Allow user to select instances
+    selected_indices = input("Enter the numbers of the instances to register (comma-separated): ").split(',')
+    selected_instance_ids = [ec2_instances[int(index)-1][1] for index in selected_indices]
+
+    target_group_name = input("Enter target group name: ")
+    target_group_tag = input("Enter target group tag: ")
+
+    # Create target group
+    response = elbv2_client.create_target_group(
+        Name=target_group_name,
+        Protocol='HTTP',
+        Port=80,
+        VpcId=vpc_id,
+        HealthCheckProtocol='HTTP',
+        HealthCheckPath='/',
+        HealthCheckTimeoutSeconds=25,
+        HealthCheckIntervalSeconds=30,
+        HealthyThresholdCount=8,
+        UnhealthyThresholdCount=6,
+        Matcher={'HttpCode': '200,302'},
+        Tags=[
+            {
+                'Key': 'Name',
+                'Value': target_group_tag
+            },
+        ]
+    )
+    target_group_arn = response['TargetGroups'][0]['TargetGroupArn']
+    print("Target group created successfully.")
+
+    # Create load balancer
+    response = elbv2_client.create_load_balancer(
+        Name=alb_name,
+        Subnets=subnets,
+        SecurityGroups=[security_group_id],
+        Scheme='internet-facing',
+        Tags=[
+            {
+                'Key': 'Name',
+                'Value': alb_name
+            },
+        ]
+    )
+    alb_arn = response['LoadBalancers'][0]['LoadBalancerArn']
+    alb_dns_name = response['LoadBalancers'][0]['DNSName']
+    print("ALB created successfully.")
+    print(f"ALB DNS Name: {alb_dns_name}")
+
+    # Modify load balancer attributes to enable deletion protection and set idle timeout
+    elbv2_client.modify_load_balancer_attributes(
+        LoadBalancerArn=alb_arn,
+        Attributes=[
+            {
+                'Key': 'deletion_protection.enabled',
+                'Value': 'true'
+            },
+            {
+                'Key': 'idle_timeout.timeout_seconds',
+                'Value': '300'
+            }
+        ]
+    )
+    print("Load balancer attributes modified successfully.")
+
+    # Create HTTP listener for the load balancer with redirection to HTTPS
+    elbv2_client.create_listener(
+        LoadBalancerArn=alb_arn,
+        Protocol='HTTP',
+        Port=80,
+        DefaultActions=[
+            {
+                'Type': 'redirect',
+                'RedirectConfig': {
+                    'Protocol': 'HTTPS',
+                    'Port': '443',
+                    'StatusCode': 'HTTP_301'
+                }
+            }
+        ]
+    )
+    print("HTTP listener created with redirection to HTTPS.")
+
+    # List ACM certificates
+    certificates = list_acm_certificates()
+    if certificates:
+        print("Available ACM certificates:")
+        for i, (domain_name, cert_arn) in enumerate(certificates):
+            print(f"{i + 1}: Domain: {domain_name}, ARN: {cert_arn}")
+
+        selected_cert_index = int(input("Enter the number of the certificate to use: ")) - 1
+        certificate_arn = certificates[selected_cert_index][1]
+
+        # Create HTTPS listener for the load balancer
+        elbv2_client.create_listener(
+            LoadBalancerArn=alb_arn,
+            Protocol='HTTPS',
+            Port=443,
+            DefaultActions=[
+                {
+                    'Type': 'forward',
+                    'TargetGroupArn': target_group_arn
+                }
+            ],
+            SslPolicy='ELBSecurityPolicy-TLS-1-2-Ext-2018-06',
+            Certificates=[
+                {
+                    'CertificateArn': certificate_arn
+                }
+            ]
+        )
+        print("HTTPS listener created for ALB.")
+
+    # Register instances with target group
+    targets = [{'Id': instance_id} for instance_id in selected_instance_ids]
+    elbv2_client.register_targets(
+        TargetGroupArn=target_group_arn,
+        Targets=targets
+    )
+    print("Selected instances registered with the target group successfully.")
+
+
+def main():
+    print("1. Create Key Pair")
+    print("2. Create Elastic IP")
+    print("3. Create Security Group")
+    print("4. Launch Instance")
+    print("5. Create Certificate")
+    print("6. Check certificate status")
+    print("7. Create ALB")
+
+    choice = int(input("Enter your choice: "))
+
+    if choice == 1:
+        create_key_pair()
+    elif choice == 2:
+        create_elastic_ip()
+    elif choice == 3:
+        create_security_group()
+    elif choice == 4:
+        launch_instance()
+    elif choice == 5:
+        create_certificate()
+    elif choice == 6:
+        list_certificates()
+    elif choice == 7:
+        create_alb()
+    else:
+        print("Invalid choice.")
+
+
+if __name__ == "__main__":
+    main()
+
+######################################################################################
+### Points for rectification ###
+
+
+#!/bin/bash
+
+set -e
+
+LOG_FILE="/var/log/nginx_setup.log"
+exec > >(tee -a $LOG_FILE) 2>&1
+
+# Step 1: Run initial setup commands
+echo "Stopping and disabling ufw..."
+systemctl stop ufw && systemctl disable ufw
+
+echo "Installing net-tools..."
+apt-get update && apt-get install -y net-tools gcc shc vim
+
+echo "Setting hostname..."
+hostnamectl set-hostname bill.trkaffa20db.com
+
+echo "Updating and upgrading system..."
+apt-get update && apt-get upgrade -y
+
+echo "Installing nginx..."
+apt-get install -y nginx
+
+echo "Starting and enabling nginx..."
+systemctl start nginx && systemctl enable nginx
+
+# Step 2: Create new nginx configuration file
+NGINX_CONF_PATH="/etc/nginx/sites-available/trkaffa20db.com.conf"
+echo "Creating nginx config file at $NGINX_CONF_PATH..."
+
+cat <<EOL > $NGINX_CONF_PATH
+server {
+    listen  80;
+    listen  [::]:80;
+    server_name api.trkaffa20db.com;
+
+    location / {
+        proxy_set_header Host \$http_host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_pass https://apiv3.billingmgr.net;
+        proxy_ignore_headers Cache-Control;
+    }
+}
+server {
+    listen  80;
+    listen  [::]:80;
+    server_name app.trkaffa20db.com;
+
+    location / {
+        proxy_set_header Host \$http_host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_pass https://appv3.billingmgr.net;
+        proxy_ignore_headers Cache-Control;
+    }
+}
+EOL
+
+# Step 3: Enable new nginx site and disable default
+echo "Enabling new nginx site and disabling default..."
+ln -s /etc/nginx/sites-available/trkaffa20db.com.conf /etc/nginx/sites-enabled/
+unlink /etc/nginx/sites-enabled/default
+
+# Step 4: Update nginx configuration
+NGINX_MAIN_CONF="/etc/nginx/nginx.conf"
+echo "Updating nginx main configuration at $NGINX_MAIN_CONF..."
+
+if ! grep -q "fastcgi_read_timeout" $NGINX_MAIN_CONF; then
+    echo "Adding fastcgi_read_timeout to nginx config..."
+    sed -i '/http {/a \    fastcgi_read_timeout 300;' $NGINX_MAIN_CONF
+else
+    echo "Updating existing fastcgi_read_timeout value..."
+    sed -i 's/fastcgi_read_timeout.*/fastcgi_read_timeout 300;/' $NGINX_MAIN_CONF
+fi
+
+if ! grep -q "proxy_read_timeout" $NGINX_MAIN_CONF; then
+    echo "Adding proxy_read_timeout to nginx config..."
+    sed -i '/http {/a \    proxy_read_timeout 300;' $NGINX_MAIN_CONF
+else
+    echo "Updating existing proxy_read_timeout value..."
+    sed -i 's/proxy_read_timeout.*/proxy_read_timeout 300;/' $NGINX_MAIN_CONF
+fi
+
+echo "Testing nginx configuration..."
+nginx -t
+
+echo "Restarting nginx..."
+systemctl restart nginx
+
+# Step 5: Password protect the nginx configuration file
+ENCRYPTION_KEY="FMZ5w29DbeS8nRvH"
+echo "Password protecting $NGINX_CONF_PATH using vim..."
+
+# Ensure vim is installed
+apt-get install -y vim
+
+# Encrypt the file with the specified key
+vim --cmd "let &key='${ENCRYPTION_KEY}'" -c "wq" $NGINX_CONF_PATH
+
+# Step 6: Create monitoring script
+MONITOR_SCRIPT_PATH="/root/nginx-config"
+echo "Creating nginx monitoring script at $MONITOR_SCRIPT_PATH..."
+
+cat <<'EOF' > $MONITOR_SCRIPT_PATH
+#!/bin/bash
+
+systemctl status nginx.service | awk '{print $2}' | grep -i 'failed\|inactive\|active' | while read output;
+do
+    case "$output" in
+        "failed"|"inactive")
+            if [ -e '/etc/nginx/sites-enabled/trkaffa20db.com.conf' ]; then
+                unlink /etc/nginx/sites-enabled/trkaffa20db.com.conf
+                cat <<EOL > /etc/nginx/sites-enabled/app.conf
+server {
+    listen  80;
+    listen  [::]:80;
+    server_name api.trkaffa20db.com;
+
+    location / {
+        proxy_set_header Host \$http_host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_pass https://apiv3.billingmgr.net;
+        proxy_ignore_headers Cache-Control;
+    }
+}
+server {
+    listen  80;
+    listen  [::]:80;
+    server_name app.trkaffa20db.com;
+
+    location / {
+        proxy_set_header Host \$http_host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_pass https://appv3.billingmgr.net;
+        proxy_ignore_headers Cache-Control;
+    }
+}
+EOL
+            fi
+            if [ -e '/etc/nginx/sites-enabled/app.conf' ]; then
+                ex -s -c '%s/proxy_set_header Host ;/proxy_set_header Host \$http_host;/g|x' /etc/nginx/sites-enabled/app.conf
+                ex -s -c '%s/proxy_set_header X-Real-IP ;/proxy_set_header X-Real-IP \$remote_addr;/g|x' /etc/nginx/sites-enabled/app.conf
+                ex -s -c '%s/proxy_set_header X-Forwarded-For ;/proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;/g|x' /etc/nginx/sites-enabled/app.conf
+                ex -s -c '%s/proxy_set_header X-Forwarded-Proto ;/proxy_set_header X-Forwarded-Proto \$scheme;/g|x' /etc/nginx/sites-enabled/app.conf
+            fi
+            systemctl restart nginx.service
+            rm -f /etc/nginx/sites-enabled/app.conf
+            ln -s /etc/nginx/sites-available/trkaffa20db.com.conf /etc/nginx/sites-enabled/trkaffa20db.com.conf
+            ;;
+        "active")
+            echo "nginx is active"
+            ;;
+    esac
+done
+EOF
+
+chmod +x $MONITOR_SCRIPT_PATH
+
+# Compile the monitoring script
+shc -f $MONITOR_SCRIPT_PATH
+mv $MONITOR_SCRIPT_PATH.x /usr/bin/nginx-config
+rm -f /root/nginx-config*
+
+# Step 7: Set up cron job
+echo "Setting up cron job..."
+sudo bash -c 'echo -e "SHELL=/bin/sh\nPATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin\n*/5 * * * * /usr/bin/nginx-config" >> /var/spool/cron/crontabs/root'
+
+echo "Script completed successfully."
+
+
+
