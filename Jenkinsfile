@@ -60,7 +60,7 @@ pipeline {
 
                     // Assign permission
                     sh """
-                    chown -R root:root ${REMOTE_PATH}/*
+                    chown -R root:root ${REMOTE_PATH}
                     """
                 }
             }
